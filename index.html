@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nebby Orbit</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="hud">
+        <div class="hud-col">
+          <div class="hud-row"><span class="k">Epoch</span><span id="hudEpoch">—</span></div>
+          <div class="hud-row"><span class="k">Sector</span><span id="hudSector">—</span></div>
+        </div>
+      </header>
+
+      <main class="stage" id="stage">
+        <svg id="orbitSvg" viewBox="0 0 1000 1000"></svg>
+        <canvas id="fxCanvas"></canvas>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
