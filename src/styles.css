@@ -1,0 +1,26 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #050510;
+  color: white;
+  font-family: system-ui;
+}
+
+#app {
+  max-width: 980px;
+  margin: auto;
+  padding: 20px;
+}
+
+.stage {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: radial-gradient(circle, rgba(120,80,255,0.1), transparent);
+}
+
+canvas, svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
