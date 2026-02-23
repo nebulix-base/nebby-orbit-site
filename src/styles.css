@@ -1,26 +1,84 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
 html, body {
   margin: 0;
-  height: 100%;
-  background: #050510;
-  color: white;
-  font-family: system-ui;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
 }
 
 #app {
-  max-width: 980px;
-  margin: auto;
-  padding: 20px;
-}
-
-.stage {
   position: relative;
-  aspect-ratio: 1 / 1;
-  background: radial-gradient(circle, rgba(120,80,255,0.1), transparent);
+  width: 100vw;
+  height: 100vh;
 }
 
-canvas, svg {
+#scene {
   position: absolute;
   inset: 0;
-  width: 100%;
+  display: block;
+}
+
+.hud {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: rgba(10, 10, 18, 0.46);
+  border: 1px solid rgba(200, 180, 255, 0.15);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  min-width: 220px;
+}
+
+.hud-title {
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+  color: rgba(240, 232, 255, 0.95);
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 6px 0;
+}
+
+.hud-label {
+  color: rgba(220, 210, 255, 0.65);
+  font-size: 12px;
+}
+
+.hud-value {
+  color: rgba(245, 238, 255, 0.92);
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.bar {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(200, 180, 255, 0.10);
+}
+
+.bar-fill {
   height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(160,120,255,0.8), rgba(90,170,255,0.8));
+  border-radius: 999px;
+}
+
+.hud-sub {
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(220, 210, 255, 0.55);
 }
