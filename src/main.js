@@ -217,6 +217,7 @@ let last = nowSec();
 const redpoly = { x: 0, y: 0 };
 let checkpointCooldown = 0; // seconds
 let checkpointFlash = 0;    // 0..1
+let animT = 0;
 
 function tick() {
   const tNow = nowSec();
@@ -224,7 +225,9 @@ function tick() {
 
   const epochProgress = ((tNow % EPOCH_SECONDS) / EPOCH_SECONDS);
   const sector = Math.floor(epochProgress * SECTORS);
-
+  const dt = (tNow - last) * SPEED_MULT;
+  animT += dt;
+  
   epochEl.textContent = String(Math.floor(tNow / EPOCH_SECONDS));
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
   barFill.style.width = `${Math.max(0, Math.min(100, epochProgress * 100))}%`;
@@ -236,7 +239,7 @@ redpoly.x = w * 0.28;
 redpoly.y = h * 0.40;
 
 // Draw RedPoly marker
-drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, tNow / 6);
+drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
   drawRedPoly(w * 0.28, h * 0.40, Math.min(w, h) * 0.07, Date.now() / 6000);
   const p = orbitPoint(epochProgress);
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
