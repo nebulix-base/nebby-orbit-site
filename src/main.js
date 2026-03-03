@@ -239,8 +239,8 @@ redpoly.x = w * 0.28;
 redpoly.y = h * 0.40;
 
 // Draw RedPoly marker
-drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
-  drawRedPoly(w * 0.28, h * 0.40, Math.min(w, h) * 0.07, Date.now() / 6000);
+  drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
+  
   const p = orbitPoint(epochProgress);
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
 
