@@ -221,16 +221,16 @@ let animT = 0;
 
 function tick() {
   const tNow = nowSec();
-  last = tNow;
-
-  const epochProgress = ((tNow % EPOCH_SECONDS) / EPOCH_SECONDS);
-  const sector = Math.floor(epochProgress * SECTORS);
   const dt = (tNow - last) * SPEED_MULT;
+  last = tNow;
+  
   animT += dt;
   
-  epochEl.textContent = String(Math.floor(tNow / EPOCH_SECONDS));
-  sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
-  barFill.style.width = `${Math.max(0, Math.min(100, epochProgress * 100))}%`;
+const epochProgress = (tNow % EPOCH_SECONDS) / EPOCH_SECONDS;
+const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
+
+sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
+barFill.style.width = `${epochProgress * 100}%`;
 
   ctx.clearRect(0, 0, w, h);
   drawBackground();
