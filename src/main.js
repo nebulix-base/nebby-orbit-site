@@ -252,7 +252,7 @@ const dy = p.y - redpoly.y;
 const dist = Math.hypot(dx, dy);
 
 // threshold scales with screen size
-const threshold = Math.min(w, h) * 0.06;
+const threshold = Math.min(w, h) * 0.06; 
 
 // decrease timers
 checkpointCooldown = Math.max(0, checkpointCooldown - dt);
