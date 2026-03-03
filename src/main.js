@@ -31,7 +31,36 @@ const ctx = canvas.getContext("2d");
 const epochEl = document.getElementById("epoch");
 const sectorEl = document.getElementById("sector");
 const barFill = document.getElementById("barFill");
+function drawRedPoly(cx, cy, size, t) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
+  const glow = 12 + pulse * 18;
 
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  ctx.shadowColor = "rgba(255, 80, 80, 0.9)";
+  ctx.shadowBlur = glow;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = `rgba(255, 90, 90, ${0.75 + 0.2 * pulse})`;
+
+  const sides = 7;
+  ctx.beginPath();
+  for (let i = 0; i <= sides; i++) {
+    const a = (i / sides) * Math.PI * 2 + t * 0.25;
+    const x = Math.cos(a) * size;
+    const y = Math.sin(a) * size;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = `rgba(255, 60, 60, ${0.06 + 0.06 * pulse})`;
+  ctx.fill();
+
+  ctx.restore();
+}
 // ======= PARAMETERS (tune later) =======
 const EPOCH_SECONDS = 24 * 60 * 60; // 24h
 const SECTORS = 90;                // 90 sectors
