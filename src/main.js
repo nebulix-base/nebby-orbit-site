@@ -31,6 +31,7 @@ const ctx = canvas.getContext("2d");
 const epochEl = document.getElementById("epoch");
 const sectorEl = document.getElementById("sector");
 const barFill = document.getElementById("barFill");
+const subEl = document.getElementById("sub");
 function drawRedPoly(cx, cy, size, t) {
   const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
   const glow = 12 + pulse * 18;
@@ -212,6 +213,11 @@ function nowSec() {
 
 let last = nowSec();
 
+// --- RedPoly checkpoint ---
+const redpoly = { x: 0, y: 0 };
+let checkpointCooldown = 0; // seconds
+let checkpointFlash = 0;    // 0..1
+
 function tick() {
   const tNow = nowSec();
   last = tNow;
@@ -225,6 +231,12 @@ function tick() {
 
   ctx.clearRect(0, 0, w, h);
   drawBackground();
+  // RedPoly position (fixed anchor in scene)
+redpoly.x = w * 0.28;
+redpoly.y = h * 0.40;
+
+// Draw RedPoly marker
+drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, tNow / 6);
   drawRedPoly(w * 0.28, h * 0.40, Math.min(w, h) * 0.07, Date.now() / 6000);
   const p = orbitPoint(epochProgress);
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
@@ -234,6 +246,43 @@ function tick() {
   const vy = p2.y - p.y;
 
   drawComet(p.x, p.y, vx, vy);
+  // --- Checkpoint logic: trigger when comet passes near RedPoly ---
+const dx = p.x - redpoly.x;
+const dy = p.y - redpoly.y;
+const dist = Math.hypot(dx, dy);
+
+// threshold scales with screen size
+const threshold = Math.min(w, h) * 0.06;
+
+// decrease timers
+checkpointCooldown = Math.max(0, checkpointCooldown - dt);
+checkpointFlash = Math.max(0, checkpointFlash - dt * 2.5);
+
+// trigger on near pass (and not spamming)
+if (dist < threshold && checkpointCooldown === 0) {
+  checkpointCooldown = 2.0; // seconds before it can trigger again
+  checkpointFlash = 1.0;    // start flash
+
+  if (subEl) subEl.textContent = "CHECKPOINT ✦ RedPoly reached";
+}
+
+// apply flash styling to HUD while active
+if (subEl) {
+  if (checkpointFlash > 0) {
+    // subtle pulse effect
+    const a = 0.55 + 0.45 * checkpointFlash;
+    subEl.style.color = `rgba(255, 140, 140, ${a})`;
+    subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
+  } else {
+    // restore default look
+    subEl.style.color = "";
+    subEl.style.textShadow = "";
+    // optional: revert message after flash ends
+    if (subEl.textContent.startsWith("CHECKPOINT")) {
+      subEl.textContent = "Stage 0 • Visual simulation";
+    }
+  }
+}
 
   requestAnimationFrame(tick);
 }
