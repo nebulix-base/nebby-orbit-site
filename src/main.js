@@ -225,7 +225,7 @@ function tick() {
 
   ctx.clearRect(0, 0, w, h);
   drawBackground();
-
+  drawRedPoly(w * 0.28, h * 0.40, Math.min(w, h) * 0.07, Date.now() / 6000);
   const p = orbitPoint(epochProgress);
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
 
