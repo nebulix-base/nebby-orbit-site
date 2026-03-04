@@ -69,10 +69,26 @@ const SPEED_MULT = 1;              // 1 = real-time
 // ======================================
 
 let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1);
+let prevW = 0;
+let prevH = 0;
 
 function resize() {
+  prevW = w || window.innerWidth;
+  prevH = h || window.innerHeight;
+
   w = window.innerWidth;
   h = window.innerHeight;
+
+  // scale star positions so they keep their relative place
+  const sx = w / prevW;
+  const sy = h / prevH;
+  if (Number.isFinite(sx) && Number.isFinite(sy) && sx > 0 && sy > 0) {
+    for (const s of stars) {
+      s.x *= sx;
+      s.y *= sy;
+    }
+  }
+
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
   canvas.style.width = `${w}px`;
@@ -220,6 +236,13 @@ let checkpointFlash = 0;    // 0..1
 let animT = 0;
 
 function tick() {
+
+  if (!epochEl || !sectorEl || !barFill) {
+  epochEl = document.getElementById("epoch");
+  sectorEl = document.getElementById("sector");
+  barFill = document.getElementById("barFill");
+}
+  
   const tNow = nowSec();
   const dt = (tNow - last) * SPEED_MULT;
   last = tNow;
