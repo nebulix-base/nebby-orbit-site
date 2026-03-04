@@ -28,9 +28,9 @@ app.innerHTML = `
 const canvas = document.getElementById("scene");
 const ctx = canvas.getContext("2d");
 
-const epochEl = document.getElementById("epoch");
-const sectorEl = document.getElementById("sector");
-const barFill = document.getElementById("barFill");
+let epochEl = document.getElementById("epoch");
+let sectorEl = document.getElementById("sector");
+let barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 function drawRedPoly(cx, cy, size, t) {
   const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
@@ -72,6 +72,18 @@ let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1);
 let prevW = 0;
 let prevH = 0;
 
+
+// --- Starfield ---
+const stars = Array.from({ length: 180 }, () => ({
+  x: Math.random() * w,
+  y: Math.random() * h,
+  r: Math.random() * 1.6 + 0.2,
+  a: Math.random() * 0.8 + 0.2,
+  vx: (Math.random() - 0.5) * 0.06,
+  vy: (Math.random() - 0.5) * 0.06,
+}));
+
+
 function resize() {
   prevW = w || window.innerWidth;
   prevH = h || window.innerHeight;
@@ -80,8 +92,8 @@ function resize() {
   h = window.innerHeight;
 
   // scale star positions so they keep their relative place
-  const sx = w / prevW;
-  const sy = h / prevH;
+  const sx = prevW ? (w / prevW) : 1;
+  const sy = prevH ? (h / prevH) : 1;
   if (Number.isFinite(sx) && Number.isFinite(sy) && sx > 0 && sy > 0) {
     for (const s of stars) {
       s.x *= sx;
@@ -97,16 +109,6 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
-
-// --- Starfield ---
-const stars = Array.from({ length: 180 }, () => ({
-  x: Math.random() * w,
-  y: Math.random() * h,
-  r: Math.random() * 1.6 + 0.2,
-  a: Math.random() * 0.8 + 0.2,
-  vx: (Math.random() - 0.5) * 0.06,
-  vy: (Math.random() - 0.5) * 0.06,
-}));
 
 function drawBackground() {
   const g = ctx.createRadialGradient(w * 0.55, h * 0.45, 0, w * 0.55, h * 0.45, Math.max(w, h));
@@ -252,6 +254,7 @@ function tick() {
 const epochProgress = (tNow % EPOCH_SECONDS) / EPOCH_SECONDS;
 const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
 
+epochEl.textContent = String(Math.floor(tNow / EPOCH_SECONDS));  
 sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
 barFill.style.width = `${epochProgress * 100}%`;
 
