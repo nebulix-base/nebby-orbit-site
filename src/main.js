@@ -178,7 +178,7 @@ function drawOrbit(cx, cy, rx, ry) {
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(180, 120, 255, 0.35)";
+  ctx.strokeStyle = "rgba(220, 210, 255, 0.22)";
   ctx.lineWidth = 1;
   for (let i = 0; i < SECTORS; i += 3) {
     const a = (i / SECTORS) * Math.PI * 2;
@@ -268,7 +268,15 @@ redpoly.y = h * 0.40;
   drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
   
   const p = orbitPoint(epochProgress);
+
+// inner orbit
+  drawOrbit(p.cx, p.cy, p.rx * 0.75, p.ry * 0.75);
+
+// main orbit
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
+
+// outer orbit
+  drawOrbit(p.cx, p.cy, p.rx * 1.35, p.ry * 1.35);
 
   const p2 = orbitPoint((epochProgress + 0.002) % 1);
   const vx = p2.x - p.x;
