@@ -233,6 +233,12 @@ let last = nowSec();
 
 // --- RedPoly checkpoint ---
 const redpoly = { x: 0, y: 0 };
+// --- Orbit markers (planet checkpoints) ---
+const markers = [
+  { t: 0.12, name: "☉ Sun Gate" },
+  { t: 0.38, name: "☾ Moon Gate" },
+  { t: 0.67, name: "♂ Mars Gate" }
+];
 let checkpointCooldown = 0; // seconds
 let checkpointFlash = 0;    // 0..1
 let animT = 0;
@@ -282,12 +288,44 @@ redpoly.y = h * 0.40;
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
+  // draw orbit markers
+for (const m of markers) {
+  const mp = orbitPoint(m.t);
+
+  ctx.beginPath();
+  ctx.fillStyle = "rgba(255,210,120,0.9)";
+  ctx.arc(mp.x, mp.y, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowColor = "rgba(255,200,120,0.8)";
+  ctx.shadowBlur = 10;
+}
+ctx.shadowBlur = 0;
+  
   drawComet(p.x, p.y, vx, vy);
   // --- Checkpoint logic: trigger when comet passes near RedPoly ---
 const dx = p.x - redpoly.x;
 const dy = p.y - redpoly.y;
 const dist = Math.hypot(dx, dy);
 
+// --- Planet checkpoint triggers ---
+for (const m of markers) {
+  const mp = orbitPoint(m.t);
+
+  const dxm = p.x - mp.x;
+  const dym = p.y - mp.y;
+  const d = Math.hypot(dxm, dym);
+
+  const triggerDist = Math.min(w, h) * 0.035;
+
+  if (d < triggerDist && checkpointCooldown === 0) {
+    checkpointCooldown = 2.0;
+    checkpointFlash = 1.0;
+
+    if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+  }
+}
+  
 // threshold scales with screen size
 const threshold = Math.min(w, h) * 0.06; 
 
