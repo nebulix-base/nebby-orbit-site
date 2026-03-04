@@ -267,8 +267,8 @@ barFill.style.width = `${epochProgress * 100}%`;
   ctx.clearRect(0, 0, w, h);
   drawBackground();
   // RedPoly position (fixed anchor in scene)
-redpoly.x = w * 0.28;
-redpoly.y = h * 0.40;
+redpoly.x = w * 0.20;
+redpoly.y = h * 0.38;
 
 // Draw RedPoly marker
   drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
@@ -294,7 +294,9 @@ for (const m of markers) {
 
   ctx.beginPath();
   ctx.fillStyle = "rgba(255,210,120,0.9)";
-  ctx.arc(mp.x, mp.y, 3.5, 0, Math.PI * 2);
+  ctx.shadowColor = "rgba(255,210,120,0.9)";
+  ctx.shadowBlur = 14;
+  ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.shadowColor = "rgba(255,200,120,0.8)";
