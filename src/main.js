@@ -74,9 +74,9 @@ let prevH = 0;
 
 
 // --- Starfield ---
-const stars = Array.from({ length: 180 }, () => ({
-  x: Math.random() * w,
-  y: Math.random() * h,
+const stars = Array.from({ length: 240 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
   r: Math.random() * 1.6 + 0.2,
   a: Math.random() * 0.8 + 0.2,
   vx: (Math.random() - 0.5) * 0.06,
