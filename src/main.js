@@ -34,26 +34,35 @@ const barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 
 // ======= PARAMETERS YOU CAN TUNE =======
-const EPOCH_SECONDS = 24 * 60 * 60; // "a day" in your HUD logic
+const EPOCH_SECONDS = 24 * 60 * 60; // keep NORMAL (real-time)
 const SECTORS = 90;
 
-// ✅ Make checkpoints happen often (this is the big fix)
-// 1 = real-time. Try 60, 120, 300 for faster.
-const TIME_SCALE = 120;
+// Orbit spin: you said it's fine (leave as-is)
+const ORBIT_SPIN_BASE = 0.07;
+const ORBIT_SPIN_WOBBLE = 0.015;
+const ORBIT_SPIN_WOBBLE_RATE = 0.2;
 
-// ✅ Orbit spin speed (smaller = slower)
-const ORBIT_SPIN = 0.035; // try 0.02 .. 0.06
+// Starfield: make it feel LESS attached to the orbit + MUCH slower
+const STAR_CENTER_X = 0.44; // moved away from orbit center (0.52)
+const STAR_CENTER_Y = 0.62; // moved away from orbit center (0.52)
+const STAR_CENTER_WOBBLE_PX = 48; // stronger drift/wobble than before
+const STAR_CENTER_WOBBLE_RATE_X = 0.18;
+const STAR_CENTER_WOBBLE_RATE_Y = 0.14;
 
-// ✅ Starfield spiral is now DECOUPLED from orbit rotation
-// (different center + its own gentle drift so it doesn't feel "attached")
-const STAR_CENTER_X = 0.50; // 0..1
-const STAR_CENTER_Y = 0.54; // 0..1
-const STAR_CENTER_WOBBLE = 0.018; // 0..0.05
+// Much slower spiral + forward drift
+const STAR_SWIRL = 0.000045; // << slower
+const STAR_DRIFT = 0.0065;   // << slower
 
-// Star motion feel
-const STAR_SWIRL = 0.00012; // lower = slower spiral
-const STAR_DRIFT = 0.018;   // higher = more "forward travel"
+// Trails strength
+const TRAIL_BASE = 0.08;
+const TRAIL_NEAR_BOOST = 0.22;
 
+// Checkpoint HUD behavior
+const CHECKPOINT_TRIGGER_DIST_FRAC = 0.038; // distance threshold (fraction of min(w,h))
+const CHECKPOINT_HOLD_WHILE_NEAR = true;    // keep message while near (not only on load)
+const CHECKPOINT_COOLDOWN_SEC = 0.5;        // prevent immediate retrigger spam
+const CHECKPOINT_FADE_OUT_SEC = 1.4;        // slower fade-out
+const CHECKPOINT_PULSE_RATE = 1.4;          // slower flicker/pulse (lower = slower)
 // =======================================
 
 let w = 0,
@@ -64,7 +73,23 @@ let prevH = 0;
 
 // ---------------- STARFIELD ----------------
 
-// Mid layer (spiral + trails)
+// Far layer (slow drift)
+const farStars = Array.from({ length: 220 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.25 + Math.random() * 0.5,
+  a: 0.12 + Math.random() * 0.28,
+}));
+
+// Near layer (faster drift)
+const nearStars = Array.from({ length: 120 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.8 + Math.random() * 1.6,
+  a: 0.25 + Math.random() * 0.55,
+}));
+
+// Mid spiral layer (with trails)
 const stars = Array.from({ length: 520 }, () => {
   const z = Math.random();
   const x = Math.random() * window.innerWidth;
@@ -85,24 +110,9 @@ const stars = Array.from({ length: 520 }, () => {
   };
 });
 
-// Far layer (slow drift)
-const farStars = Array.from({ length: 220 }, () => ({
-  x: Math.random() * window.innerWidth,
-  y: Math.random() * window.innerHeight,
-  r: 0.25 + Math.random() * 0.5,
-  a: 0.12 + Math.random() * 0.28,
-}));
-
-// Near layer (faster drift)
-const nearStars = Array.from({ length: 120 }, () => ({
-  x: Math.random() * window.innerWidth,
-  y: Math.random() * window.innerHeight,
-  r: 0.8 + Math.random() * 1.6,
-  a: 0.25 + Math.random() * 0.55,
-}));
-
 function respawnStar(s, cx, cy) {
   const ang = Math.random() * Math.PI * 2;
+  // bias spawn toward center to maintain density
   const rad = Math.pow(Math.random(), 0.6) * 40;
 
   s.x = cx + Math.cos(ang) * rad;
@@ -135,6 +145,7 @@ function resize() {
     s.x *= sx;
     s.y *= sy;
   }
+
   for (const s of nearStars) {
     s.x *= sx;
     s.y *= sy;
@@ -169,17 +180,20 @@ function drawBackground(t, dt) {
   // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
 
-  // ✅ Starfield center is NOT exactly the orbit center anymore
-  const cxBase = w * STAR_CENTER_X;
-  const cyBase = h * STAR_CENTER_Y;
+  // ✅ starfield center is intentionally NOT the orbit center
+  const cx =
+    w * STAR_CENTER_X +
+    Math.sin(t * STAR_CENTER_WOBBLE_RATE_X) * STAR_CENTER_WOBBLE_PX +
+    Math.sin(t * 0.07) * 12;
 
-  // gentle wobble so it feels like you're drifting through space, not "stuck to orbit"
-  const cx = cxBase + Math.sin(t * 0.27) * (Math.min(w, h) * STAR_CENTER_WOBBLE);
-  const cy = cyBase + Math.cos(t * 0.23) * (Math.min(w, h) * STAR_CENTER_WOBBLE);
+  const cy =
+    h * STAR_CENTER_Y +
+    Math.cos(t * STAR_CENTER_WOBBLE_RATE_Y) * STAR_CENTER_WOBBLE_PX +
+    Math.cos(t * 0.06) * 10;
 
-  // FAR STAR LAYER
+  // FAR STAR LAYER (slow drift)
   for (const s of farStars) {
-    s.x += 0.03 * step;
+    s.x += 0.018 * step;
     if (s.x > w + 2) s.x = -2;
 
     ctx.beginPath();
@@ -188,10 +202,12 @@ function drawBackground(t, dt) {
     ctx.fill();
   }
 
-  // MID STAR LAYER (spiral + trails)
+  // MID SPIRAL LAYER (slow spiral + trails)
   for (const s of stars) {
+    // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
 
+    // previous pos for trail segment
     s.px = s.x;
     s.py = s.y;
 
@@ -201,26 +217,31 @@ function drawBackground(t, dt) {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-    // lens near center
+    // subtle lens near starfield center
     const lensRadius = Math.min(w, h) * 0.22;
-    const lensStrength = 0.35;
+    const lensStrength = 0.28;
+
     let lens = 0;
     if (dist < lensRadius) {
       const d = dist / lensRadius;
       lens = (1 - d) * lensStrength;
     }
 
+    // tangential direction
     const tx = -dy * inv;
     const ty = dx * inv;
 
+    // radial direction
     const rx = dx * inv;
     const ry = dy * inv;
 
     const k = s.speed;
 
-    s.x += ((tx * STAR_SWIRL * k * 900) + (rx * STAR_DRIFT * k) + (rx * lens * 40)) * step;
-    s.y += ((ty * STAR_SWIRL * k * 900) + (ry * STAR_DRIFT * k) + (ry * lens * 40)) * step;
+    // ✅ much slower motion than before
+    s.x += ((tx * STAR_SWIRL * k * 900) + (rx * STAR_DRIFT * k) + (rx * lens * 34)) * step;
+    s.y += ((ty * STAR_SWIRL * k * 900) + (ry * STAR_DRIFT * k) + (ry * lens * 34)) * step;
 
+    // recycle stars (prevents empty gaps after long time)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
       continue;
@@ -230,11 +251,12 @@ function drawBackground(t, dt) {
       continue;
     }
 
-    const tw = 0.85 + 0.15 * Math.sin(t * 1.4 + s.phase);
+    // twinkle + alpha
+    const tw = 0.86 + 0.14 * Math.sin(t * 1.1 + s.phase);
     const alpha = s.a * tw * (0.25 + 0.75 * s.life);
 
-    // trails
-    const trailStrength = 0.10 + 0.30 * s.z;
+    // trail (stronger for nearer stars)
+    const trailStrength = (TRAIL_BASE + TRAIL_NEAR_BOOST * s.z);
     ctx.beginPath();
     ctx.strokeStyle = `rgba(220,210,255,${alpha * trailStrength})`;
     ctx.lineWidth = 0.35 + s.z * 0.9;
@@ -253,9 +275,9 @@ function drawBackground(t, dt) {
     ctx.shadowBlur = 0;
   }
 
-  // NEAR STAR LAYER
+  // NEAR STAR LAYER (parallax drift)
   for (const s of nearStars) {
-    s.x += 0.25 * step;
+    s.x += 0.17 * step;
     if (s.x > w + 2) s.x = -2;
 
     ctx.beginPath();
@@ -264,16 +286,9 @@ function drawBackground(t, dt) {
     ctx.fill();
   }
 
-  // glow
+  // faint gravitational glow for starfield center (not orbit center)
   ctx.globalAlpha = 0.08;
-  const lg = ctx.createRadialGradient(
-    cx,
-    cy,
-    0,
-    cx,
-    cy,
-    Math.min(w, h) * 0.25
-  );
+  const lg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * 0.25);
   lg.addColorStop(0, "rgba(200,160,255,1)");
   lg.addColorStop(1, "rgba(200,160,255,0)");
   ctx.fillStyle = lg;
@@ -365,9 +380,6 @@ let lastMs = 0;
 let animT = 0;
 let orbitRotation = 0;
 
-// used to make the epoch progress move fast (but still "acts like" a day)
-const simStartReal = Date.now() / 1000;
-
 function tick(ms) {
   if (!lastMs) lastMs = ms;
   const dt = (ms - lastMs) / 1000;
@@ -375,25 +387,25 @@ function tick(ms) {
 
   animT += dt;
 
-  // ✅ simulate time so checkpoints trigger often
-  const simNow = simStartReal + animT * TIME_SCALE;
-  const epochProgress = (simNow % EPOCH_SECONDS) / EPOCH_SECONDS;
+  // ✅ KEEP NORMAL REAL TIME
+  const realNow = Date.now() / 1000;
+  const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
   const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
 
   // HUD
-  epochEl.textContent = String(Math.floor(simNow / EPOCH_SECONDS));
+  epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
   barFill.style.width = `${epochProgress * 100}%`;
 
-  // draw bg + stars
+  // draw background + stars
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
   // orbit point for comet
   const p = orbitPoint(epochProgress);
 
-  // orbit rotation (slower, less “soap spin”)
-  orbitRotation += dt * ORBIT_SPIN;
+  // orbit rotation (you said it’s fine)
+  orbitRotation += dt * (ORBIT_SPIN_BASE + Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
 
   // rotate orbit group
   ctx.save();
@@ -410,27 +422,37 @@ function tick(ms) {
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // checkpoint trigger (edge trigger)
+  // ---- checkpoint trigger (when NEARING checkpoints, not just on load) ----
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i];
     const mp = orbitPoint(m.t);
 
     const d = Math.hypot(p.x - mp.x, p.y - mp.y);
-    const triggerDist = Math.min(w, h) * 0.035;
+    const triggerDist = Math.min(w, h) * CHECKPOINT_TRIGGER_DIST_FRAC;
     const near = d < triggerDist;
 
-    if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
-      // ✅ stays visible longer + flashes slower
-      checkpointCooldown = 0.35;
-      checkpointHold = 3.6;  // was 1.6
+    // edge-trigger (entering near zone)
+    if (near && !wasNearMarker[i] && checkpointCooldown <= 0) {
+      checkpointCooldown = CHECKPOINT_COOLDOWN_SEC;
+      checkpointHold = 2.6;      // show longer than before
       checkpointFlash = 1.0;
       subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+    }
+
+    // if you want the HUD to keep showing while we're near ANY checkpoint:
+    if (CHECKPOINT_HOLD_WHILE_NEAR && near) {
+      checkpointHold = Math.max(checkpointHold, 0.25); // keep alive softly
+      checkpointFlash = Math.max(checkpointFlash, 0.45);
+      // keep latest checkpoint name in HUD while near
+      if (!subEl.textContent.startsWith("CHECKPOINT")) {
+        subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+      }
     }
 
     wasNearMarker[i] = near;
   }
 
-  // triangle lines
+  // ---- marker triangle lines ----
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
@@ -446,7 +468,7 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // marker dots
+  // ---- draw checkpoint marker dots ----
   for (const m of markers) {
     const mp = orbitPoint(m.t);
     ctx.beginPath();
@@ -463,17 +485,23 @@ function tick(ms) {
 
   ctx.restore();
 
-  // HUD timers
+  // ---- checkpoint HUD timers + slower flicker ----
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
-
   checkpointHold = Math.max(0, checkpointHold - dt);
-  if (checkpointHold > 0) checkpointFlash = 1.0;
-  else checkpointFlash = Math.max(0, checkpointFlash - dt * 0.25); // ✅ slower fade
 
-  // HUD visual pulse (slower)
+  if (checkpointHold > 0) {
+    // keep flash alive while held
+    checkpointFlash = 1.0;
+  } else {
+    // slower fade out
+    checkpointFlash = Math.max(0, checkpointFlash - dt / CHECKPOINT_FADE_OUT_SEC);
+  }
+
   if (checkpointFlash > 0) {
-    const pulse = 0.55 + 0.45 * Math.sin(animT * 2.2); // ✅ slower pulse
-    const a = (0.45 + 0.55 * pulse) * checkpointFlash;
+    // ✅ slower pulse (less “fast flicker”)
+    const pulse = 0.62 + 0.38 * Math.sin(animT * CHECKPOINT_PULSE_RATE);
+    const a = pulse * checkpointFlash;
+
     subEl.style.color = `rgba(255, 140, 140, ${a})`;
     subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
   } else {
