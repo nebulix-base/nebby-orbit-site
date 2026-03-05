@@ -43,26 +43,45 @@ const ORBIT_SPIN_WOBBLE = 0.015;
 const ORBIT_SPIN_WOBBLE_RATE = 0.2;
 
 // Starfield: make it feel LESS attached to the orbit + MUCH slower
-const STAR_CENTER_X = 0.44; // moved away from orbit center (0.52)
-const STAR_CENTER_Y = 0.62; // moved away from orbit center (0.52)
-const STAR_CENTER_WOBBLE_PX = 48; // stronger drift/wobble than before
+const STAR_CENTER_X = 0.44;
+const STAR_CENTER_Y = 0.62;
+const STAR_CENTER_WOBBLE_PX = 48;
 const STAR_CENTER_WOBBLE_RATE_X = 0.18;
 const STAR_CENTER_WOBBLE_RATE_Y = 0.14;
 
 // Much slower spiral + forward drift
-const STAR_SWIRL = 0.000045; // << slower
-const STAR_DRIFT = 0.0065;   // << slower
+const STAR_SWIRL = 0.000045;
+const STAR_DRIFT = 0.0065;
 
 // Trails strength
 const TRAIL_BASE = 0.08;
 const TRAIL_NEAR_BOOST = 0.22;
 
 // Checkpoint HUD behavior
-const CHECKPOINT_TRIGGER_DIST_FRAC = 0.038; // distance threshold (fraction of min(w,h))
-const CHECKPOINT_HOLD_WHILE_NEAR = true;    // keep message while near (not only on load)
-const CHECKPOINT_COOLDOWN_SEC = 0.5;        // prevent immediate retrigger spam
-const CHECKPOINT_FADE_OUT_SEC = 1.4;        // slower fade-out
-const CHECKPOINT_PULSE_RATE = 1.4;          // slower flicker/pulse (lower = slower)
+const CHECKPOINT_TRIGGER_DIST_FRAC = 0.038;
+const CHECKPOINT_HOLD_WHILE_NEAR = true;
+const CHECKPOINT_COOLDOWN_SEC = 0.5;
+const CHECKPOINT_FADE_OUT_SEC = 1.4;
+const CHECKPOINT_PULSE_RATE = 1.4;
+
+// ===== NEW: VISUAL SECTOR + CLAIM TUNES =====
+const TICK_RING_SCALE = 1.35;            // put ticks on the outer ring
+const TICK_MINOR_LEN = 7;
+const TICK_MAJOR_LEN = 14;
+const TICK_MAJOR_EVERY = 10;             // major tick every N sectors
+const ACTIVE_ARC_HALF_WINDOW_SECTORS = 1.5; // arc covers +/- this many sectors around "current"
+const ACTIVE_ARC_STEPS = 42;             // smoothness of arc on ellipse
+
+// Marker / gate sectors (fixed sector numbers)
+const GATES = [
+  { sector: 0, name: "☉ Sun Gate" },
+  { sector: 30, name: "☾ Moon Gate" },
+  { sector: 60, name: "♂ Mars Gate" },
+];
+
+// Optional “claim ready” rule (purely visual now):
+// claimReady when you're near a gate AND sector is within +/- CLAIM_SECTOR_WINDOW
+const CLAIM_SECTOR_WINDOW = 1;
 // =======================================
 
 let w = 0,
@@ -112,7 +131,6 @@ const stars = Array.from({ length: 520 }, () => {
 
 function respawnStar(s, cx, cy) {
   const ang = Math.random() * Math.PI * 2;
-  // bias spawn toward center to maintain density
   const rad = Math.pow(Math.random(), 0.6) * 40;
 
   s.x = cx + Math.cos(ang) * rad;
@@ -162,7 +180,6 @@ window.addEventListener("resize", resize);
 resize();
 
 function drawBackground(t, dt) {
-  // background gradient
   const g = ctx.createRadialGradient(
     w * 0.55,
     h * 0.45,
@@ -177,10 +194,8 @@ function drawBackground(t, dt) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
 
-  // ✅ starfield center is intentionally NOT the orbit center
   const cx =
     w * STAR_CENTER_X +
     Math.sin(t * STAR_CENTER_WOBBLE_RATE_X) * STAR_CENTER_WOBBLE_PX +
@@ -191,7 +206,6 @@ function drawBackground(t, dt) {
     Math.cos(t * STAR_CENTER_WOBBLE_RATE_Y) * STAR_CENTER_WOBBLE_PX +
     Math.cos(t * 0.06) * 10;
 
-  // FAR STAR LAYER (slow drift)
   for (const s of farStars) {
     s.x += 0.018 * step;
     if (s.x > w + 2) s.x = -2;
@@ -202,12 +216,9 @@ function drawBackground(t, dt) {
     ctx.fill();
   }
 
-  // MID SPIRAL LAYER (slow spiral + trails)
   for (const s of stars) {
-    // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
 
-    // previous pos for trail segment
     s.px = s.x;
     s.py = s.y;
 
@@ -217,7 +228,6 @@ function drawBackground(t, dt) {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-    // subtle lens near starfield center
     const lensRadius = Math.min(w, h) * 0.22;
     const lensStrength = 0.28;
 
@@ -227,21 +237,25 @@ function drawBackground(t, dt) {
       lens = (1 - d) * lensStrength;
     }
 
-    // tangential direction
     const tx = -dy * inv;
     const ty = dx * inv;
 
-    // radial direction
     const rx = dx * inv;
     const ry = dy * inv;
 
     const k = s.speed;
 
-    // ✅ much slower motion than before
-    s.x += ((tx * STAR_SWIRL * k * 900) + (rx * STAR_DRIFT * k) + (rx * lens * 34)) * step;
-    s.y += ((ty * STAR_SWIRL * k * 900) + (ry * STAR_DRIFT * k) + (ry * lens * 34)) * step;
+    s.x +=
+      ((tx * STAR_SWIRL * k * 900) +
+        (rx * STAR_DRIFT * k) +
+        (rx * lens * 34)) *
+      step;
+    s.y +=
+      ((ty * STAR_SWIRL * k * 900) +
+        (ry * STAR_DRIFT * k) +
+        (ry * lens * 34)) *
+      step;
 
-    // recycle stars (prevents empty gaps after long time)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
       continue;
@@ -251,12 +265,10 @@ function drawBackground(t, dt) {
       continue;
     }
 
-    // twinkle + alpha
     const tw = 0.86 + 0.14 * Math.sin(t * 1.1 + s.phase);
     const alpha = s.a * tw * (0.25 + 0.75 * s.life);
 
-    // trail (stronger for nearer stars)
-    const trailStrength = (TRAIL_BASE + TRAIL_NEAR_BOOST * s.z);
+    const trailStrength = TRAIL_BASE + TRAIL_NEAR_BOOST * s.z;
     ctx.beginPath();
     ctx.strokeStyle = `rgba(220,210,255,${alpha * trailStrength})`;
     ctx.lineWidth = 0.35 + s.z * 0.9;
@@ -265,7 +277,6 @@ function drawBackground(t, dt) {
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
 
-    // dot
     ctx.shadowBlur = s.z > 0.78 ? 8 : 0;
     ctx.shadowColor = "rgba(220,210,255,0.6)";
     ctx.beginPath();
@@ -275,7 +286,6 @@ function drawBackground(t, dt) {
     ctx.shadowBlur = 0;
   }
 
-  // NEAR STAR LAYER (parallax drift)
   for (const s of nearStars) {
     s.x += 0.17 * step;
     if (s.x > w + 2) s.x = -2;
@@ -286,7 +296,6 @@ function drawBackground(t, dt) {
     ctx.fill();
   }
 
-  // faint gravitational glow for starfield center (not orbit center)
   ctx.globalAlpha = 0.08;
   const lg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * 0.25);
   lg.addColorStop(0, "rgba(200,160,255,1)");
@@ -363,12 +372,89 @@ function drawComet(x, y, vx, vy) {
   ctx.restore();
 }
 
-// ---------------- CHECKPOINTS ----------------
-const markers = [
-  { t: 0.12, name: "☉ Sun Gate" },
-  { t: 0.38, name: "☾ Moon Gate" },
-  { t: 0.67, name: "♂ Mars Gate" },
-];
+// ---------------- NEW: SECTOR VISUALS ----------------
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function wrapSectorDelta(a, b) {
+  // smallest delta between sectors a and b on a ring
+  const d = a - b;
+  const m = ((d % SECTORS) + SECTORS) % SECTORS;
+  return m > SECTORS / 2 ? m - SECTORS : m;
+}
+
+function ellipsePoint(cx, cy, rx, ry, angleRad) {
+  return {
+    x: cx + Math.cos(angleRad) * rx,
+    y: cy + Math.sin(angleRad) * ry,
+  };
+}
+
+function ellipseOutNormal(rx, ry, angleRad) {
+  // outward normal for ellipse x=rx cos(a), y=ry sin(a) is proportional to (cos(a)/rx, sin(a)/ry)
+  const nx = Math.cos(angleRad) / Math.max(1e-6, rx);
+  const ny = Math.sin(angleRad) / Math.max(1e-6, ry);
+  const mag = Math.max(1e-6, Math.hypot(nx, ny));
+  return { nx: nx / mag, ny: ny / mag };
+}
+
+function drawSectorTicks(cx, cy, rx, ry, sectors) {
+  ctx.save();
+
+  ctx.lineCap = "round";
+
+  for (let i = 0; i < sectors; i++) {
+    const ang = (i / sectors) * Math.PI * 2;
+
+    const p = ellipsePoint(cx, cy, rx, ry, ang);
+    const n = ellipseOutNormal(rx, ry, ang);
+
+    const isMajor = i % TICK_MAJOR_EVERY === 0;
+    const len = isMajor ? TICK_MAJOR_LEN : TICK_MINOR_LEN;
+
+    const x1 = p.x + n.nx * 2;
+    const y1 = p.y + n.ny * 2;
+    const x2 = p.x + n.nx * (2 + len);
+    const y2 = p.y + n.ny * (2 + len);
+
+    ctx.strokeStyle = isMajor
+      ? "rgba(255,220,200,0.35)"
+      : "rgba(220,200,255,0.16)";
+    ctx.lineWidth = isMajor ? 2.0 : 1.0;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawEllipseArc(cx, cy, rx, ry, a0, a1, steps) {
+  // Draw arc by sampling points (Canvas ellipse arc is awkward when rotated/approximated)
+  const dir = a1 >= a0 ? 1 : -1;
+  const span = Math.abs(a1 - a0);
+  const n = Math.max(8, steps);
+
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const ang = a0 + dir * span * t;
+    const p = ellipsePoint(cx, cy, rx, ry, ang);
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+}
+
+// ---------------- CHECKPOINTS / GATES ----------------
+// Convert fixed sector markers into orbit fractions (t in [0,1))
+const markers = GATES.map((g) => ({
+  sector: ((g.sector % SECTORS) + SECTORS) % SECTORS,
+  t: (((g.sector % SECTORS) + SECTORS) % SECTORS) / SECTORS,
+  name: g.name,
+}));
 
 let checkpointCooldown = 0;
 let checkpointHold = 0;
@@ -390,7 +476,10 @@ function tick(ms) {
   // ✅ KEEP NORMAL REAL TIME
   const realNow = Date.now() / 1000;
   const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
+
+  // sector index (0..SECTORS-1)
   const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
+  const sectorWithin = epochProgress * SECTORS - sector; // 0..1 within sector
 
   // HUD
   epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
@@ -405,7 +494,10 @@ function tick(ms) {
   const p = orbitPoint(epochProgress);
 
   // orbit rotation (you said it’s fine)
-  orbitRotation += dt * (ORBIT_SPIN_BASE + Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
+  orbitRotation +=
+    dt *
+    (ORBIT_SPIN_BASE +
+      Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
 
   // rotate orbit group
   ctx.save();
@@ -413,16 +505,64 @@ function tick(ms) {
   ctx.rotate(orbitRotation);
   ctx.translate(-p.cx, -p.cy);
 
-  drawOrbit(p.cx, p.cy, p.rx * 0.75, p.ry * 0.75);
-  drawOrbit(p.cx, p.cy, p.rx, p.ry);
-  drawOrbit(p.cx, p.cy, p.rx * 1.35, p.ry * 1.35);
+  // Rings
+  const rxInner = p.rx * 0.75;
+  const ryInner = p.ry * 0.75;
+  const rxMid = p.rx;
+  const ryMid = p.ry;
+  const rxOuter = p.rx * 1.35;
+  const ryOuter = p.ry * 1.35;
+
+  drawOrbit(p.cx, p.cy, rxInner, ryInner);
+  drawOrbit(p.cx, p.cy, rxMid, ryMid);
+  drawOrbit(p.cx, p.cy, rxOuter, ryOuter);
+
+  // NEW: sector ticks on outer ring
+  drawSectorTicks(p.cx, p.cy, rxOuter * 1.0, ryOuter * 1.0, SECTORS);
+
+  // NEW: active sector “claim window” arc (smoothly tracks within-sector progress)
+  const currentAngle = ((sector + sectorWithin) / SECTORS) * Math.PI * 2;
+  const halfWindow = (ACTIVE_ARC_HALF_WINDOW_SECTORS / SECTORS) * Math.PI * 2;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(255,170,200,0.65)";
+  ctx.shadowBlur = 16;
+  ctx.lineWidth = 4.5;
+  ctx.strokeStyle = "rgba(255,170,200,0.22)";
+  drawEllipseArc(
+    p.cx,
+    p.cy,
+    rxOuter * 1.02,
+    ryOuter * 1.02,
+    currentAngle - halfWindow,
+    currentAngle + halfWindow,
+    ACTIVE_ARC_STEPS
+  );
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.lineWidth = 2.0;
+  ctx.strokeStyle = "rgba(255,230,240,0.28)";
+  drawEllipseArc(
+    p.cx,
+    p.cy,
+    rxOuter * 1.02,
+    ryOuter * 1.02,
+    currentAngle - halfWindow,
+    currentAngle + halfWindow,
+    ACTIVE_ARC_STEPS
+  );
+  ctx.stroke();
+  ctx.restore();
 
   // comet velocity
   const p2 = orbitPoint((epochProgress + 0.002) % 1);
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // ---- checkpoint trigger (when NEARING checkpoints, not just on load) ----
+  // ---- checkpoint/claim trigger logic ----
+  let claimReadyName = null;
+
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i];
     const mp = orbitPoint(m.t);
@@ -431,20 +571,24 @@ function tick(ms) {
     const triggerDist = Math.min(w, h) * CHECKPOINT_TRIGGER_DIST_FRAC;
     const near = d < triggerDist;
 
-    // edge-trigger (entering near zone)
+    // Optional: claim-ready if sector matches window around marker sector
+    const sd = Math.abs(wrapSectorDelta(sector, m.sector));
+    const claimReady = near && sd <= CLAIM_SECTOR_WINDOW;
+    if (claimReady) claimReadyName = m.name;
+
+    // edge-trigger entering near zone
     if (near && !wasNearMarker[i] && checkpointCooldown <= 0) {
       checkpointCooldown = CHECKPOINT_COOLDOWN_SEC;
-      checkpointHold = 2.6;      // show longer than before
+      checkpointHold = 2.6;
       checkpointFlash = 1.0;
       subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
     }
 
-    // if you want the HUD to keep showing while we're near ANY checkpoint:
+    // keep message while near
     if (CHECKPOINT_HOLD_WHILE_NEAR && near) {
-      checkpointHold = Math.max(checkpointHold, 0.25); // keep alive softly
+      checkpointHold = Math.max(checkpointHold, 0.25);
       checkpointFlash = Math.max(checkpointFlash, 0.45);
-      // keep latest checkpoint name in HUD while near
-      if (!subEl.textContent.startsWith("CHECKPOINT")) {
+      if (!subEl.textContent.startsWith("CHECKPOINT") && !subEl.textContent.startsWith("CLAIM")) {
         subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
       }
     }
@@ -452,12 +596,17 @@ function tick(ms) {
     wasNearMarker[i] = near;
   }
 
+  // If claim-ready (purely visual for now), override HUD message
+  if (claimReadyName) {
+    subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
+  }
+
   // ---- marker triangle lines ----
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
     ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(255,210,150,0.25)";
+    ctx.strokeStyle = "rgba(255,210,150,0.22)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -468,17 +617,44 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // ---- draw checkpoint marker dots ----
+  // ---- draw gate marker dots + labels ----
   for (const m of markers) {
     const mp = orbitPoint(m.t);
+
+    // label fades in as Nebby approaches
+    const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
+    const revealStart = Math.min(w, h) * 0.22;
+    const revealEnd = Math.min(w, h) * 0.07;
+    const aLabel = clamp01((revealStart - dist) / Math.max(1e-6, (revealStart - revealEnd)));
+
+    // dot
     ctx.beginPath();
-    ctx.fillStyle = "rgba(255,210,120,0.9)";
+    ctx.fillStyle = "rgba(255,210,120,0.92)";
     ctx.shadowColor = "rgba(255,210,120,0.9)";
     ctx.shadowBlur = 14;
     ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // label
+    if (aLabel > 0.02) {
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.75 * aLabel;
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillStyle = "rgba(255,235,245,0.9)";
+      ctx.shadowColor = "rgba(255,190,230,0.65)";
+      ctx.shadowBlur = 10;
+
+      // small outward offset from marker
+      const ang = m.t * Math.PI * 2;
+      const n = ellipseOutNormal(p.rx, p.ry, ang);
+      const ox = n.nx * 18;
+      const oy = n.ny * 18;
+
+      ctx.fillText(m.name, mp.x + ox, mp.y + oy);
+      ctx.restore();
+    }
   }
-  ctx.shadowBlur = 0;
 
   // comet
   drawComet(p.x, p.y, vx, vy);
@@ -490,15 +666,19 @@ function tick(ms) {
   checkpointHold = Math.max(0, checkpointHold - dt);
 
   if (checkpointHold > 0) {
-    // keep flash alive while held
     checkpointFlash = 1.0;
   } else {
-    // slower fade out
     checkpointFlash = Math.max(0, checkpointFlash - dt / CHECKPOINT_FADE_OUT_SEC);
   }
 
-  if (checkpointFlash > 0) {
-    // ✅ slower pulse (less “fast flicker”)
+  // HUD styling: claim vs checkpoint vs idle
+  if (subEl.textContent.startsWith("CLAIM READY")) {
+    const pulse = 0.68 + 0.32 * Math.sin(animT * 1.1);
+    const a = pulse * 0.95;
+
+    subEl.style.color = `rgba(160, 255, 190, ${a})`;
+    subEl.style.textShadow = `0 0 18px rgba(120, 255, 170, ${a})`;
+  } else if (checkpointFlash > 0 && subEl.textContent.startsWith("CHECKPOINT")) {
     const pulse = 0.62 + 0.38 * Math.sin(animT * CHECKPOINT_PULSE_RATE);
     const a = pulse * checkpointFlash;
 
@@ -507,7 +687,10 @@ function tick(ms) {
   } else {
     subEl.style.color = "";
     subEl.style.textShadow = "";
-    if (subEl.textContent.startsWith("CHECKPOINT")) {
+    if (
+      subEl.textContent.startsWith("CHECKPOINT") ||
+      subEl.textContent.startsWith("CLAIM READY")
+    ) {
       subEl.textContent = "Stage 0 • Visual simulation";
     }
   }
