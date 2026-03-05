@@ -51,6 +51,20 @@ const stars = Array.from({ length: 520 }, () => {
   const x = Math.random() * window.innerWidth;
   const y = Math.random() * window.innerHeight;
 
+const farStars = Array.from({ length: 220 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.25 + Math.random() * 0.5,
+  a: 0.15 + Math.random() * 0.35
+}));
+
+const nearStars = Array.from({ length: 120 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.8 + Math.random() * 1.6,
+  a: 0.35 + Math.random() * 0.6
+}));
+  
   return {
     x,
     y,
@@ -96,6 +110,17 @@ function resize() {
     s.y *= sy;
     s.px *= sx;
     s.py *= sy;
+  
+  for (const s of farStars) {
+  s.x *= sx;
+  s.y *= sy;
+}
+
+for (const s of nearStars) {
+  s.x *= sx;
+  s.y *= sy;
+}
+  
   }
 
   canvas.width = Math.floor(w * dpr);
@@ -134,6 +159,29 @@ function drawBackground(t, dt) {
   // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
 
+// FAR STAR LAYER (very slow drift)
+for (const s of farStars) {
+
+  s.x += 0.03;
+  if (s.x > w) s.x = 0;
+
+  ctx.beginPath();
+  ctx.fillStyle = `rgba(200,210,255,${s.a})`;
+  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+ // NEAR STAR LAYER (faster parallax)
+for (const s of nearStars) {
+
+  s.x += 0.25;
+  if (s.x > w) s.x = 0;
+
+  ctx.beginPath();
+  ctx.fillStyle = `rgba(255,240,255,${s.a})`;
+  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+  ctx.fill();
+} 
   for (const s of stars) {
     // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
