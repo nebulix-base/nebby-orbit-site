@@ -45,15 +45,18 @@ let prevH = 0;
 
 
 // --- Starfield ---
-const stars = Array.from({ length: 240 }, () => {
-  const speed = Math.random() * 0.25 + 0.05;
+const stars = Array.from({ length: 320 }, () => {
+  const z = Math.random(); // 0..1 depth (0 = far, 1 = near)
+  const speed = 0.15 + z * 0.55; // near stars move faster
+
   return {
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
-    r: Math.random() * 1.6 + 0.2,
-    a: Math.random() * 0.8 + 0.2,
-    vx: (Math.random() - 0.5) * speed,
-    vy: (Math.random() - 0.5) * speed
+    r: 0.4 + z * 1.8,
+    a: 0.15 + z * 0.85,
+    z,
+    speed,
+    phase: Math.random() * Math.PI * 2, // twinkle phase
   };
 });
 
@@ -92,20 +95,53 @@ function drawBackground() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  for (const s of stars) {
-    s.x += s.vx;
-    s.y += s.vy;
+ // --- Spiral starfield ---
+const cx = w * 0.55;
+const cy = h * 0.50;
 
-    if (s.x < -20) s.x = w + 20;
-    if (s.x > w + 20) s.x = -20;
-    if (s.y < -20) s.y = h + 20;
-    if (s.y > h + 20) s.y = -20;
+// feel controls
+const swirl = 0.0028;   // rotation strength (increase for more spin)
+const drift = 0.22;     // forward drift feeling (increase for faster travel)
 
-    ctx.beginPath();
-    ctx.fillStyle = `rgba(220, 210, 255, ${s.a})`;
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
+for (const s of stars) {
+  // vector from center
+  let dx = s.x - cx;
+  let dy = s.y - cy;
+
+  // tangential direction (perpendicular) for swirl
+  const inv = 1 / Math.max(40, Math.hypot(dx, dy));
+  const tx = -dy * inv;
+  const ty =  dx * inv;
+
+  // radial direction for “through space” travel
+  const rx = dx * inv;
+  const ry = dy * inv;
+
+  // near stars move more (depth)
+  const k = s.speed;
+
+  // swirl + drift
+  s.x += (tx * swirl * k * 1000) + (rx * drift * k * 0.6);
+  s.y += (ty * swirl * k * 1000) + (ry * drift * k * 0.6);
+
+  // slight overall downward bias to avoid symmetry (optional)
+  s.y += 0.03 * k;
+
+  // wrap around with a “respawn” at edges, biased to outside ring
+  if (s.x < -60 || s.x > w + 60 || s.y < -60 || s.y > h + 60) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = Math.max(w, h) * (0.55 + Math.random() * 0.25);
+    s.x = cx + Math.cos(ang) * rad;
+    s.y = cy + Math.sin(ang) * rad;
   }
+
+  // twinkle
+  const tw = 0.75 + 0.25 * Math.sin(animT * 1.2 + s.phase);
+  ctx.beginPath();
+  ctx.fillStyle = `rgba(220, 210, 255, ${s.a * tw})`;
+  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+  ctx.fill();
+}
 
   // soft nebula haze
   ctx.globalAlpha = 0.12;
