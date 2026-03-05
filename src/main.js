@@ -96,12 +96,12 @@ function drawBackground() {
   ctx.fillRect(0, 0, w, h);
 
  // --- Spiral starfield ---
-const cx = w * 0.55;
-const cy = h * 0.50;
+const cx = w * 0.15;
+const cy = h * 0.10;
 
 // feel controls
-const swirl = 0.0018;   // rotation strength (increase for more spin)
-const drift = 0.12;     // forward drift feeling (increase for faster travel)
+const swirl = 0.0005;   // rotation strength (increase for more spin)
+const drift = 0.05;     // forward drift feeling (increase for faster travel)
 
 for (const s of stars) {
   // vector from center
