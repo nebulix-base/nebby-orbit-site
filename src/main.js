@@ -100,8 +100,8 @@ const cx = w * 0.55;
 const cy = h * 0.50;
 
 // feel controls
-const swirl = 0.0028;   // rotation strength (increase for more spin)
-const drift = 0.22;     // forward drift feeling (increase for faster travel)
+const swirl = 0.0018;   // rotation strength (increase for more spin)
+const drift = 0.12;     // forward drift feeling (increase for faster travel)
 
 for (const s of stars) {
   // vector from center
