@@ -96,7 +96,7 @@ const ACTIVE_ARC_STEPS = 42;
 const GATES = [
   { sector: 0, name: "☉ Sun Gate" },
   { sector: 30, name: "☾ Moon Gate" },
-  { sector: 60, name: "♂ Mars Gate" },
+  { sector: 60, name: "⟡ Apex Gate" }, // neutral third anchor
 ];
 
 // Claim window (visual only)
@@ -106,7 +106,7 @@ const CLAIM_SECTOR_WINDOW = 1;
 const MAJOR_EPOCHS = [15, 30, 45, 60, 75, 90];
 const MAJOR_LABELS = {
   15: "🌙 Moon Pass",
-  30: "🔴 Mars Pass",
+  30: "🔴 Apex Pass",
   45: "🟣 Deep Space",
   60: "🟡 Jupiter Pass",
   75: "☀ Solar Flare",
