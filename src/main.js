@@ -106,7 +106,7 @@ const CLAIM_SECTOR_WINDOW = 1;
 const MAJOR_EPOCHS = [15, 30, 45, 60, 75, 90];
 const MAJOR_LABELS = {
   15: "🌙 Moon Pass",
-  30: "🔴 Apex Pass",
+  30: "🔴 Mars Pass",
   45: "🟣 Deep Space",
   60: "🟡 Jupiter Pass",
   75: "☀ Solar Flare",
@@ -130,23 +130,20 @@ let prevW = 0;
 let prevH = 0;
 
 // ---------------- DEV TIME OFFSET (FOR TESTING) ----------------
-// This does NOT change real-time logic; it just offsets the clock used by visuals/HUD.
 let devTimeOffsetSec = 0;
 
 window.addEventListener("keydown", (e) => {
   const k = (e.key || "").toLowerCase();
 
   if (k === "n") {
-    // simulate next epoch flip: move clock forward to just after next epoch boundary
-    const realNow = Date.now() / 1000 + devTimeOffsetSec;
-    const nextEpochStart = (Math.floor(realNow / EPOCH_SECONDS) + 1) * EPOCH_SECONDS;
-    devTimeOffsetSec += (nextEpochStart - realNow) + 0.25;
+    const now = Date.now() / 1000 + devTimeOffsetSec;
+    const nextEpochStart = (Math.floor(now / EPOCH_SECONDS) + 1) * EPOCH_SECONDS;
+    devTimeOffsetSec += (nextEpochStart - now) + 0.25;
   }
 
   if (k === "m") {
-    // jump to next major epoch-in-orbit (fast test)
-    const realNow = Date.now() / 1000 + devTimeOffsetSec;
-    const epochIndex = Math.floor(realNow / EPOCH_SECONDS);
+    const now = Date.now() / 1000 + devTimeOffsetSec;
+    const epochIndex = Math.floor(now / EPOCH_SECONDS);
     const epochInOrbit = (epochIndex % ORBIT_EPOCHS) + 1;
 
     let target = null;
@@ -161,12 +158,11 @@ window.addEventListener("keydown", (e) => {
     let deltaEpochs = target - epochInOrbit;
     if (deltaEpochs <= 0) deltaEpochs += ORBIT_EPOCHS;
 
-    // move to start of that epoch (plus a small epsilon)
     devTimeOffsetSec += deltaEpochs * EPOCH_SECONDS;
-    // align close to boundary trigger by moving to just after the boundary
+
     const now2 = Date.now() / 1000 + devTimeOffsetSec;
-    const nextEpochStart = (Math.floor(now2 / EPOCH_SECONDS)) * EPOCH_SECONDS;
-    devTimeOffsetSec += (nextEpochStart - now2) + 0.25;
+    const epochStart = Math.floor(now2 / EPOCH_SECONDS) * EPOCH_SECONDS;
+    devTimeOffsetSec += (epochStart - now2) + 0.25;
   }
 
   if (k === "r") {
@@ -210,6 +206,17 @@ function roman(n) {
     }
   }
   return out || "—";
+}
+
+function rotateAround(x, y, cx, cy, ang) {
+  const dx = x - cx;
+  const dy = y - cy;
+  const ca = Math.cos(ang);
+  const sa = Math.sin(ang);
+  return {
+    x: cx + dx * ca - dy * sa,
+    y: cy + dx * sa + dy * ca,
+  };
 }
 
 // Epoch/Orbit helpers
@@ -639,7 +646,7 @@ function drawWarpPulse(cx, cy, tNorm) {
 
 function drawMajorOverlay(label, tLeft) {
   const total = MAJOR_OVERLAY_SEC;
-  const t = 1 - tLeft / total; // 0..1
+  const t = 1 - tLeft / total;
 
   let a = 1;
   if (t < MAJOR_OVERLAY_FADE_IN) a = t / MAJOR_OVERLAY_FADE_IN;
@@ -725,10 +732,16 @@ function tick(ms) {
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
+  // orbit position (unrotated param)
   const p = orbitPoint(dayProgress);
 
+  // update orbit rotation
   orbitRotation += dt * (ORBIT_SPIN_BASE + Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
 
+  // draw-space (rotated) Nebby point used for all proximity + comet drawing
+  const pDraw = rotateAround(p.x, p.y, p.cx, p.cy, orbitRotation);
+
+  // ===== draw orbit group rotated =====
   ctx.save();
   ctx.translate(p.cx, p.cy);
   ctx.rotate(orbitRotation);
@@ -773,17 +786,22 @@ function tick(ms) {
 
   if (warpPulseLeft > 0) drawWarpPulse(p.cx, p.cy, warpPulseT);
 
+  // compute velocity in draw-space so tail aligns with rendered motion
   const p2 = orbitPoint((dayProgress + 0.002) % 1);
-  const vx = p2.x - p.x;
-  const vy = p2.y - p.y;
+  const p2Draw = rotateAround(p2.x, p2.y, p.cx, p.cy, orbitRotation);
+  const vx = p2Draw.x - pDraw.x;
+  const vy = p2Draw.y - pDraw.y;
 
+  // checkpoint/claim triggers (USE DRAW-SPACE DISTANCES)
   let claimReadyName = null;
 
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i];
     const mp = orbitPoint(m.t);
 
-    const d = Math.hypot(p.x - mp.x, p.y - mp.y);
+    const mpDraw = rotateAround(mp.x, mp.y, p.cx, p.cy, orbitRotation);
+    const d = Math.hypot(pDraw.x - mpDraw.x, pDraw.y - mpDraw.y);
+
     const triggerDist = Math.min(w, h) * CHECKPOINT_TRIGGER_DIST_FRAC;
     const near = d < triggerDist;
 
@@ -812,152 +830,143 @@ function tick(ms) {
   if (claimReadyName) subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
 
   // Apex triangle (celestial mechanism)
-if (markers.length >= 3) {
-  const pts = markers.map((m) => orbitPoint(m.t));
+  if (markers.length >= 3) {
+    const pts = markers.map((m) => orbitPoint(m.t));
+    const pulse = 0.55 + 0.45 * Math.sin(animT * 0.35);
 
-  // slow breathing pulse
-  const pulse = 0.55 + 0.45 * Math.sin(animT * 0.35);
+    ctx.save();
 
-  ctx.save();
+    ctx.shadowColor = "rgba(255,200,170,0.65)";
+    ctx.shadowBlur = 14 * pulse;
 
-  // soft outer glow
-  ctx.shadowColor = "rgba(255,200,170,0.65)";
-  ctx.shadowBlur = 14 * pulse;
+    ctx.strokeStyle = `rgba(255,210,170,${0.18 + pulse * 0.12})`;
+    ctx.lineWidth = 1.4;
 
-  ctx.strokeStyle = `rgba(255,210,170,${0.18 + pulse * 0.12})`;
-  ctx.lineWidth = 1.4;
-
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  ctx.lineTo(pts[1].x, pts[1].y);
-  ctx.lineTo(pts[2].x, pts[2].y);
-  ctx.closePath();
-  ctx.stroke();
-
-  // inner energy filament
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(255,235,210,${0.28 + pulse * 0.22})`;
-  ctx.lineWidth = 0.9;
-
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  ctx.lineTo(pts[1].x, pts[1].y);
-  ctx.lineTo(pts[2].x, pts[2].y);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.restore();
-}
-
- // draw gate dots + labels that reveal when close (Apex has distinct energy)
-for (const m of markers) {
-  const mp = orbitPoint(m.t);
-
-  const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
-  const revealStart = Math.min(w, h) * 0.22;
-  const revealEnd = Math.min(w, h) * 0.07;
-  const aLabel = clamp01(
-    (revealStart - dist) / Math.max(1e-6, revealStart - revealEnd)
-  );
-
-  // base "near" detection for gate-specific pulsing (doesn't change your checkpoint logic)
-  const nearFrac = clamp01((revealStart - dist) / Math.max(1e-6, revealStart));
-  const isApex = m.name.includes("Apex");
-  const isMoon = m.name.includes("Moon");
-  const isSun = m.name.includes("Sun");
-
-  // slow pulse base
-  const basePulse = 0.70 + 0.30 * Math.sin(animT * (isApex ? 0.95 : 0.65));
-
-  // gate palette
-  let dotFill = "rgba(255,210,120,0.92)";
-  let dotGlow = "rgba(255,210,120,0.9)";
-  let dotGlowBlur = 14;
-
-  if (isMoon) {
-    dotFill = "rgba(220,235,255,0.92)";
-    dotGlow = "rgba(200,220,255,0.9)";
-    dotGlowBlur = 15;
-  } else if (isApex) {
-    dotFill = "rgba(210,170,255,0.92)";
-    dotGlow = "rgba(200,140,255,0.95)";
-    dotGlowBlur = 18;
-  } else if (isSun) {
-    // keep sun warm/gold (already default)
-    dotGlowBlur = 15;
-  }
-
-  // dot
-  ctx.save();
-  ctx.shadowColor = dotGlow;
-  ctx.shadowBlur = dotGlowBlur * (0.85 + 0.55 * basePulse);
-
-  ctx.beginPath();
-  ctx.fillStyle = dotFill;
-  ctx.arc(mp.x, mp.y, 5.2, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Apex halo ring when approaching (celestial "claim energy")
-  if (isApex) {
-    const haloA = (0.10 + 0.18 * basePulse) * (0.25 + 0.75 * nearFrac);
-    const haloR = 10 + 10 * basePulse + 18 * nearFrac;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.stroke();
 
     ctx.shadowBlur = 0;
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle = `rgba(210,160,255,${haloA})`;
-    ctx.beginPath();
-    ctx.arc(mp.x, mp.y, haloR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // faint inner ring
+    ctx.strokeStyle = `rgba(255,235,210,${0.28 + pulse * 0.22})`;
     ctx.lineWidth = 0.9;
-    ctx.strokeStyle = `rgba(240,220,255,${haloA * 0.75})`;
+
     ctx.beginPath();
-    ctx.arc(mp.x, mp.y, haloR * 0.78, 0, Math.PI * 2);
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
     ctx.stroke();
-  }
 
-  ctx.restore();
-
-  // label
-  if (aLabel > 0.02) {
-    ctx.save();
-    ctx.globalAlpha = 0.25 + 0.75 * aLabel;
-    ctx.font =
-      "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
-
-    // label color follows gate palette
-    if (isApex) {
-      ctx.fillStyle = "rgba(245,230,255,0.92)";
-      ctx.shadowColor = "rgba(210,160,255,0.75)";
-    } else if (isMoon) {
-      ctx.fillStyle = "rgba(235,245,255,0.92)";
-      ctx.shadowColor = "rgba(190,215,255,0.7)";
-    } else {
-      ctx.fillStyle = "rgba(255,235,245,0.9)";
-      ctx.shadowColor = "rgba(255,190,230,0.65)";
-    }
-
-    ctx.shadowBlur = 10;
-
-    const ang = m.t * Math.PI * 2;
-    const n = ellipseOutNormal(p.rx, p.ry, ang);
-    const ox = n.nx * 18;
-    const oy = n.ny * 18;
-
-    ctx.fillText(m.name, mp.x + ox, mp.y + oy);
     ctx.restore();
   }
-}
 
-  drawComet(p.x, p.y, vx, vy, warpBoost);
+  // draw gate dots + labels (NEAR based on draw-space)
+  for (const m of markers) {
+    const mp = orbitPoint(m.t);
+    const mpDraw = rotateAround(mp.x, mp.y, p.cx, p.cy, orbitRotation);
 
+    const dist = Math.hypot(pDraw.x - mpDraw.x, pDraw.y - mpDraw.y);
+    const revealStart = Math.min(w, h) * 0.22;
+    const revealEnd = Math.min(w, h) * 0.07;
+    const aLabel = clamp01((revealStart - dist) / Math.max(1e-6, revealStart - revealEnd));
+
+    const nearFrac = clamp01((revealStart - dist) / Math.max(1e-6, revealStart));
+    const isApex = m.name.includes("Apex");
+    const isMoon = m.name.includes("Moon");
+    const isSun = m.name.includes("Sun");
+
+    const basePulse = 0.70 + 0.30 * Math.sin(animT * (isApex ? 0.95 : 0.65));
+
+    let dotFill = "rgba(255,210,120,0.92)";
+    let dotGlow = "rgba(255,210,120,0.9)";
+    let dotGlowBlur = 14;
+
+    if (isMoon) {
+      dotFill = "rgba(220,235,255,0.92)";
+      dotGlow = "rgba(200,220,255,0.9)";
+      dotGlowBlur = 15;
+    } else if (isApex) {
+      dotFill = "rgba(210,170,255,0.92)";
+      dotGlow = "rgba(200,140,255,0.95)";
+      dotGlowBlur = 18;
+    } else if (isSun) {
+      dotGlowBlur = 15;
+    }
+
+    ctx.save();
+    ctx.shadowColor = dotGlow;
+    ctx.shadowBlur = dotGlowBlur * (0.85 + 0.55 * basePulse);
+
+    ctx.beginPath();
+    ctx.fillStyle = dotFill;
+    ctx.arc(mp.x, mp.y, 5.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isApex) {
+      const haloA = (0.10 + 0.18 * basePulse) * (0.25 + 0.75 * nearFrac);
+      const haloR = 10 + 10 * basePulse + 18 * nearFrac;
+
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = `rgba(210,160,255,${haloA})`;
+      ctx.beginPath();
+      ctx.arc(mp.x, mp.y, haloR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.lineWidth = 0.9;
+      ctx.strokeStyle = `rgba(240,220,255,${haloA * 0.75})`;
+      ctx.beginPath();
+      ctx.arc(mp.x, mp.y, haloR * 0.78, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (aLabel > 0.02) {
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.75 * aLabel;
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+
+      if (isApex) {
+        ctx.fillStyle = "rgba(245,230,255,0.92)";
+        ctx.shadowColor = "rgba(210,160,255,0.75)";
+      } else if (isMoon) {
+        ctx.fillStyle = "rgba(235,245,255,0.92)";
+        ctx.shadowColor = "rgba(190,215,255,0.7)";
+      } else {
+        ctx.fillStyle = "rgba(255,235,245,0.9)";
+        ctx.shadowColor = "rgba(255,190,230,0.65)";
+      }
+
+      ctx.shadowBlur = 10;
+
+      const ang = m.t * Math.PI * 2;
+      const n = ellipseOutNormal(p.rx, p.ry, ang);
+      const ox = n.nx * 18;
+      const oy = n.ny * 18;
+
+      ctx.fillText(m.name, mp.x + ox, mp.y + oy);
+      ctx.restore();
+    }
+  }
+
+  // comet drawn in draw-space coordinates, inside rotated group context:
+  // We draw at the unrotated coordinate system, so we must "unrotate" back.
+  // Easiest: draw comet in world space AFTER restoring rotation.
   ctx.restore();
 
+  // Draw comet in world space using draw-space positions
+  drawComet(pDraw.x, pDraw.y, vx, vy, warpBoost);
+
+  // center overlay for major events
   if (majorOverlayLeft > 0) {
     drawMajorOverlay(majorOverlayLabel.replace("PLANET PASS ✦ ", ""), majorOverlayLeft);
   }
 
+  // checkpoint HUD timers + styling
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
   checkpointHold = Math.max(0, checkpointHold - dt);
 
