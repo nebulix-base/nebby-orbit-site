@@ -308,11 +308,8 @@ for (const m of markers) {
   ctx.shadowBlur = 10;
 }
   ctx.shadowBlur = 0;
-  
-  drawComet(p.x, p.y, vx, vy);
 
-  ctx.restore();
-  
+
   // --- celestial geometry lines (astrolabe look) ---
 if (markers.length >= 3) {
   const pts = markers.map(m => orbitPoint(m.t));
@@ -330,8 +327,16 @@ if (markers.length >= 3) {
   ctx.stroke();
   ctx.shadowBlur = 0;
 }
+
+
+// comet (still on rotated orbit)
+  drawComet(p.x, p.y, vx, vy);
+
+  ctx.restore();
   
-  // --- Checkpoint logic: trigger when comet passes near RedPoly ---
+
+  
+// --- Checkpoint logic: trigger when comet passes near RedPoly ---
 const dx = p.x - redpoly.x;
 const dy = p.y - redpoly.y;
 const dist = Math.hypot(dx, dy);
