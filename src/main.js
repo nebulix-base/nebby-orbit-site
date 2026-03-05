@@ -121,7 +121,7 @@ function drawDust(cx, cy, t) {
 
   // Very faint "smoke" bands
   ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.07; // overall intensity (tune 0.04..0.12)
+  ctx.globalAlpha = 0.01; // overall intensity (tune 0.04..0.12)
 
   const bands = 8;
   const baseR = Math.min(w, h) * 0.12;
