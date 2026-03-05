@@ -64,6 +64,19 @@ const stars = Array.from({ length: 340 }, () => {
   };
 });
 
+function respawnStar(s, cx, cy) {
+  // spawn near the center, not on a far ring
+  const ang = Math.random() * Math.PI * 2;
+  const rad = 6 + Math.random() * 40; // tight spawn radius
+
+  s.x = cx + Math.cos(ang) * rad;
+  s.y = cy + Math.sin(ang) * rad;
+
+  s.life = 0;               // fade in (prevents pop)
+  s.phase = Math.random() * Math.PI * 2;
+  // (optional) tiny randomness so it doesn't look too uniform
+  // s.z = Math.random(); // only if you want depth to re-roll too
+}
 
 function resize() {
   prevW = w || window.innerWidth;
@@ -132,13 +145,16 @@ function drawBackground() {
     s.y += (ty * swirl * k * 900) + (ry * drift * k);
 
     // respawn offscreen and fade in again
-    if (s.x < -120 || s.x > w + 120 || s.y < -120 || s.y > h + 120) {
-      const ang = Math.random() * Math.PI * 2;
-      const rad = Math.max(w, h) * (0.65 + Math.random() * 0.35);
-      s.x = cx + Math.cos(ang) * rad;
-      s.y = cy + Math.sin(ang) * rad;
-      s.life = 0;
-    }
+   if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
+  respawnStar(s, cx, cy);
+}
+
+// ALSO: if a star has drifted *too far* from the center, recycle it
+// (prevents "empty patches" after long spirals)
+const dCenter = Math.hypot(s.x - cx, s.y - cy);
+if (dCenter > Math.max(w, h) * 0.95) {
+  respawnStar(s, cx, cy);
+}
 
     const tw = 0.8 + 0.2 * Math.sin(animT * 1.2 + s.phase);
     const alpha = s.a * tw * (0.15 + 0.85 * s.life);
