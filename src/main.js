@@ -464,4 +464,6 @@ function tick(ms) {
   }
 
   requestAnimationFrame(tick);
-}
+} 
+
+requestAnimationFrame(tick); // starts the loop
