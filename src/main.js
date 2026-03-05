@@ -46,7 +46,7 @@ let prevW = 0;
 let prevH = 0;
 
 // ---------------- STARFIELD ----------------
-const stars = Array.from({ length: 420 }, () => {
+const stars = Array.from({ length: 520 }, () => {
   const z = Math.random();
   const x = Math.random() * window.innerWidth;
   const y = Math.random() * window.innerHeight;
@@ -68,7 +68,9 @@ const stars = Array.from({ length: 420 }, () => {
 
 function respawnStar(s, cx, cy) {
   const ang = Math.random() * Math.PI * 2;
-  const rad = 6 + Math.random() * 30;
+
+// bias spawn toward center to maintain density
+  const rad = Math.pow(Math.random(), 0.6) * 40;
 
   s.x = cx + Math.cos(ang) * rad;
   s.y = cy + Math.sin(ang) * rad;
@@ -126,7 +128,7 @@ function drawBackground(t, dt) {
   const cy = h * 0.52;
 
   // FEEL CONTROLS
-  const swirl = 0.00011; // lower = slower spiral
+  const swirl = 0.00013; // lower = slower spiral
   const drift = 0.018;   // higher = more "forward travel"
 
   // normalize dt to ~60fps so movement is consistent
