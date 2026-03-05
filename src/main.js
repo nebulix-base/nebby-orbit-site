@@ -146,6 +146,18 @@ function drawBackground(t, dt) {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
+
+    // gravitational lens strength near center
+    const lensRadius = Math.min(w, h) * 0.22;
+    const lensStrength = 0.35;
+
+    let lens = 0;
+
+    if (dist < lensRadius) {
+    const d = dist / lensRadius;
+    lens = (1 - d) * lensStrength;
+}
+    
     // tangential direction (spin)
     const tx = -dy * inv;
     const ty = dx * inv;
@@ -157,8 +169,8 @@ function drawBackground(t, dt) {
     const k = s.speed;
 
     // update position
-    s.x += ((tx * swirl * k * 900) + (rx * drift * k)) * step;
-    s.y += ((ty * swirl * k * 900) + (ry * drift * k)) * step;
+    s.x += ((tx * swirl * k * 900) + (rx * drift * k) + (rx * lens * 40)) * step;
+    s.y += ((ty * swirl * k * 900) + (ry * drift * k) + (ry * lens * 40)) * step;
 
     // recycle stars (prevents empty gaps after long time)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
@@ -195,6 +207,23 @@ function drawBackground(t, dt) {
     ctx.fill();
     ctx.shadowBlur = 0;
   }
+  // faint gravitational glow
+ctx.globalAlpha = 0.08;
+
+const lg = ctx.createRadialGradient(
+  cx, cy, 0,
+  cx, cy, Math.min(w, h) * 0.25
+);
+
+lg.addColorStop(0, "rgba(200,160,255,1)");
+lg.addColorStop(1, "rgba(200,160,255,0)");
+
+ctx.fillStyle = lg;
+ctx.beginPath();
+ctx.arc(cx, cy, Math.min(w, h) * 0.25, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.globalAlpha = 1;
 }
 
 // ---------------- ORBIT + COMET ----------------
