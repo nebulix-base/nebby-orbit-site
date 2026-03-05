@@ -67,7 +67,7 @@ const stars = Array.from({ length: 520 }, () => {
 function respawnStar(s, cx, cy) {
   // spawn near the center, not on a far ring
   const ang = Math.random() * Math.PI * 2;
-  const rad = 6 + Math.random() * 40; // tight spawn radius
+  const rad = 4 + Math.random() * 25; // tight spawn radius
 
   s.x = cx + Math.cos(ang) * rad;
   s.y = cy + Math.sin(ang) * rad;
@@ -119,8 +119,8 @@ function drawBackground() {
   const cx = w * 0.52;
   const cy = h * 0.52;
 
-  const swirl = 0.0011;   // rotation strength
-  const drift = 0.12;     // forward travel strength
+  const swirl = 0.0005;   // rotation strength
+  const drift = 0.11;     // forward travel strength
 
   for (const s of stars) {
     // fade in instead of popping
