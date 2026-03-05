@@ -154,7 +154,8 @@ function drawDust(cx, cy, t) {
 }
 
 
-function drawBackground(t) {
+function drawBackground(t, dt) {
+  const step = Math.min(2, dt * 60); // normalize to ~60fps, clamp to avoid huge jumps
   const g = ctx.createRadialGradient(
     w * 0.55, h * 0.45, 0,
     w * 0.55, h * 0.45, Math.max(w, h)
@@ -191,8 +192,8 @@ function drawBackground(t) {
 
     const k = s.speed;
 
-    s.x += (tx * swirl * k * 900) + (rx * drift * k);
-    s.y += (ty * swirl * k * 900) + (ry * drift * k);
+    s.x += ((tx * swirl * k * 900) + (rx * drift * k)) * step;
+    s.y += ((ty * swirl * k * 900) + (ry * drift * k)) * step;
 
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
@@ -328,11 +329,7 @@ function drawComet(x, y, vx, vy) {
   ctx.restore();
 }
 
-function nowSec() {
-  return Date.now() / 1000;
-}
-
-let last = nowSec();
+let lastMs = 0;
 
 
 // --- Orbit markers (planet checkpoints) ---
@@ -349,164 +346,121 @@ let orbitRotation = 0;
 let checkpointHold = 0;                 // seconds to keep text visible
 const wasNearMarker = markers.map(() => false);
 
-function tick() {
+function tick(ms) {
+  // 1) compute dt (seconds since last frame)
+  if (!lastMs) lastMs = ms;
+  const dt = ((ms - lastMs) / 1000) * SPEED_MULT;
+  lastMs = ms;
 
-  if (!epochEl || !sectorEl || !barFill) {
-  epochEl = document.getElementById("epoch");
-  sectorEl = document.getElementById("sector");
-  barFill = document.getElementById("barFill");
-}
-  
-  const tNow = nowSec();
-  const dt = (tNow - last) * SPEED_MULT;
-  last = tNow;
-  
+  // 2) advance our animation clocks
   animT += dt;
-  orbitRotation += dt * 0.05;
-  
-const epochProgress = (tNow % EPOCH_SECONDS) / EPOCH_SECONDS;
-const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
+  orbitRotation += dt * 0.20;
 
-epochEl.textContent = String(Math.floor(tNow / EPOCH_SECONDS));  
-sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
-barFill.style.width = `${epochProgress * 100}%`;
+  // 3) compute "real time" epoch progress (for HUD + comet)
+  const realNow = Date.now() / 1000;
+  const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
+  const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
 
+  // 4) update HUD
+  epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
+  sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
+  barFill.style.width = `${epochProgress * 100}%`;
+
+  // 5) draw scene
   ctx.clearRect(0, 0, w, h);
-  drawBackground(animT);
 
-  
+  // IMPORTANT: pass BOTH animT and dt
+  drawBackground(animT, dt);
+
   const p = orbitPoint(epochProgress);
 
+  // rotate the orbit group
   ctx.save();
   ctx.translate(p.cx, p.cy);
   ctx.rotate(orbitRotation);
   ctx.translate(-p.cx, -p.cy);
-// inner orbit
+
+  // 3 rings
   drawOrbit(p.cx, p.cy, p.rx * 0.75, p.ry * 0.75);
-// main orbit
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
-// outer orbit
   drawOrbit(p.cx, p.cy, p.rx * 1.35, p.ry * 1.35);
 
+  // comet velocity
   const p2 = orbitPoint((epochProgress + 0.002) % 1);
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  
-  // draw orbit markers
+  // marker triggers (edge trigger)
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i];
+    const mp = orbitPoint(m.t);
 
-for (let i = 0; i < markers.length; i++) {
-  const m = markers[i];
-  const mp = orbitPoint(m.t);
+    const d = Math.hypot(p.x - mp.x, p.y - mp.y);
+    const triggerDist = Math.min(w, h) * 0.035;
+    const near = d < triggerDist;
 
-  const dxm = p.x - mp.x;
-  const dym = p.y - mp.y;
-  const d = Math.hypot(dxm, dym);
-
-  const triggerDist = Math.min(w, h) * 0.035;
-  const near = d < triggerDist;
-
-  if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
-    checkpointCooldown = 1.0;
-    checkpointHold = 1.6;     // readable
-    checkpointFlash = 1.0;
-    if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+    if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
+      checkpointCooldown = 1.0;
+      checkpointHold = 1.6;
+      checkpointFlash = 1.0;
+      subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+    }
+    wasNearMarker[i] = near;
   }
 
-  wasNearMarker[i] = near;
-}
-
-// --- draw orbit marker dots (visual) ---
-for (const m of markers) {
-  const mp = orbitPoint(m.t);
-
-  ctx.beginPath();
-  ctx.fillStyle = "rgba(255,210,120,0.9)";
-  ctx.shadowColor = "rgba(255,210,120,0.9)";
-  ctx.shadowBlur = 14;
-  ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
-  ctx.fill();
-}
-ctx.shadowBlur = 0;
-  
-  // --- celestial geometry lines (astrolabe look) ---
-if (markers.length >= 3) {
-  const pts = markers.map(m => orbitPoint(m.t));
-  ctx.shadowColor = "rgba(255,200,150,0.6)";
-  ctx.shadowBlur = 8;
-  ctx.strokeStyle = "rgba(255,210,150,0.25)";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-
-  ctx.moveTo(pts[0].x, pts[0].y);
-  ctx.lineTo(pts[1].x, pts[1].y);
-  ctx.lineTo(pts[2].x, pts[2].y);
-  ctx.closePath();
-
-  ctx.stroke();
+  // marker dots (visual)
+  for (const m of markers) {
+    const mp = orbitPoint(m.t);
+    ctx.beginPath();
+    ctx.fillStyle = "rgba(255,210,120,0.9)";
+    ctx.shadowColor = "rgba(255,210,120,0.9)";
+    ctx.shadowBlur = 14;
+    ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.shadowBlur = 0;
-}
 
+  // triangle lines
+  if (markers.length >= 3) {
+    const pts = markers.map(m => orbitPoint(m.t));
+    ctx.shadowColor = "rgba(255,200,150,0.6)";
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = "rgba(255,210,150,0.25)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
 
-// comet (still on rotated orbit)
+  // comet (still rotated)
   drawComet(p.x, p.y, vx, vy);
 
   ctx.restore();
 
+  // HUD timing fade
+  checkpointCooldown = Math.max(0, checkpointCooldown - dt);
+  checkpointHold = Math.max(0, checkpointHold - dt);
 
-// --- marker checkpoint triggers (edge-trigger) ---
-for (let i = 0; i < markers.length; i++) {
-  const m = markers[i];
-  const mp = orbitPoint(m.t);
-
-  const dxm = p.x - mp.x;
-  const dym = p.y - mp.y;
-  const d = Math.hypot(dxm, dym);
-
-  const triggerDist = Math.min(w, h) * 0.035;
-  const near = d < triggerDist;
-
-  if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
-    checkpointCooldown = 1.0;
-    checkpointHold = 1.6;
+  if (checkpointHold > 0) {
     checkpointFlash = 1.0;
-    if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+  } else {
+    checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
   }
 
-  wasNearMarker[i] = near;
-}
-  
-
-  
-
-// decrease timers
-checkpointCooldown = Math.max(0, checkpointCooldown - dt);
-checkpointHold = Math.max(0, checkpointHold - dt);
-if (checkpointHold > 0) {
-  checkpointFlash = 1.0;
-} else {
-  checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
-}
-
-// apply flash styling to HUD while active
-if (subEl) {
   if (checkpointFlash > 0) {
-    // subtle pulse effect
     const a = 0.55 + 0.45 * checkpointFlash;
     subEl.style.color = `rgba(255, 140, 140, ${a})`;
     subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
   } else {
-    // restore default look
     subEl.style.color = "";
     subEl.style.textShadow = "";
-    // optional: revert message after flash ends
     if (subEl.textContent.startsWith("CHECKPOINT")) {
       subEl.textContent = "Stage 0 • Visual simulation";
     }
   }
-}
 
   requestAnimationFrame(tick);
-}
-
-tick();
