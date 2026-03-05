@@ -305,6 +305,25 @@ for (const m of markers) {
 ctx.shadowBlur = 0;
   
   drawComet(p.x, p.y, vx, vy);
+
+  // --- celestial geometry lines (astrolabe look) ---
+if (markers.length >= 3) {
+  const pts = markers.map(m => orbitPoint(m.t));
+  ctx.shadowColor = "rgba(255,200,150,0.6)";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = "rgba(255,210,150,0.25)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+
+  ctx.moveTo(pts[0].x, pts[0].y);
+  ctx.lineTo(pts[1].x, pts[1].y);
+  ctx.lineTo(pts[2].x, pts[2].y);
+  ctx.closePath();
+
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+  
   // --- Checkpoint logic: trigger when comet passes near RedPoly ---
 const dx = p.x - redpoly.x;
 const dy = p.y - redpoly.y;
