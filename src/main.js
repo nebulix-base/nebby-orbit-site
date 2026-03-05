@@ -119,8 +119,8 @@ function drawBackground() {
   const cx = w * 0.52;
   const cy = h * 0.52;
 
-  const swirl = 0.0005;   // rotation strength
-  const drift = 0.11;     // forward travel strength
+  const swirl = 0.0001;   // rotation strength
+  const drift = 0.02;     // forward travel strength
 
   for (const s of stars) {
     // fade in instead of popping
