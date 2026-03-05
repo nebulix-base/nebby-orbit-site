@@ -28,58 +28,45 @@ app.innerHTML = `
 const canvas = document.getElementById("scene");
 const ctx = canvas.getContext("2d");
 
-let epochEl = document.getElementById("epoch");
-let sectorEl = document.getElementById("sector");
-let barFill = document.getElementById("barFill");
+const epochEl = document.getElementById("epoch");
+const sectorEl = document.getElementById("sector");
+const barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 
-// ======= PARAMETERS (tune later) =======
-const EPOCH_SECONDS = 24 * 60 * 60; // 24h
-const SECTORS = 90;                // 90 sectors
-const SPEED_MULT = 1;              // 1 = real-time
-// ======================================
+const EPOCH_SECONDS = 24 * 60 * 60;
+const SECTORS = 90;
+const SPEED_MULT = 1;
 
 let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1);
 let prevW = 0;
 let prevH = 0;
 
-// --- Starfield (spiral + subtle warp + fade-in) ---
-const stars = Array.from({ length: 460 }, () => {
-  const z = Math.random();              // 0..1 depth (0 far, 1 near)
-  const speed = 0.25 + z * 1.25;        // near stars move faster
-
+const stars = Array.from({ length: 420 }, () => {
+  const z = Math.random();
   return {
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
-    r: 0.35 + z * 1.6,
-    a: 0.15 + z * 0.85,
+    r: 0.4 + z * 1.6,
+    a: 0.2 + z * 0.8,
     z,
-    speed,
-    phase: Math.random() * Math.PI * 2,
-    life: Math.random(),                // fade-in progress
-    grow: 0.008 + Math.random() * 0.014  // fade-in rate (slow enough not to pop)
+    speed: 0.3 + z * 1.4,
+    phase: Math.random() * Math.PI * 2
   };
 });
 
 function respawnStar(s, cx, cy) {
-  // spawn near the center, not on a far ring
-  const arms = 3;                         // number of spiral arms
+  const arms = 3;
   const arm = Math.floor(Math.random() * arms);
   const armOffset = (Math.PI * 2 / arms) * arm;
 
   const ang = armOffset + (Math.random() - 0.5) * 0.6;
-  const rad = 4 + Math.random() * 25; // tight spawn radius
+  const rad = 4 + Math.random() * 28;
 
   const twist = rad * 0.015;
   const finalAngle = ang + twist;
 
   s.x = cx + Math.cos(finalAngle) * rad;
   s.y = cy + Math.sin(finalAngle) * rad;
-
-  s.life = 0;               // fade in (prevents pop)
-  s.phase = Math.random() * Math.PI * 2;
-  // (optional) tiny randomness so it doesn't look too uniform
-  // s.z = Math.random(); // only if you want depth to re-roll too
 }
 
 function resize() {
@@ -89,14 +76,12 @@ function resize() {
   w = window.innerWidth;
   h = window.innerHeight;
 
-  // scale star positions so they keep their relative place
-  const sx = prevW ? (w / prevW) : 1;
-  const sy = prevH ? (h / prevH) : 1;
-  if (Number.isFinite(sx) && Number.isFinite(sy) && sx > 0 && sy > 0) {
-    for (const s of stars) {
-      s.x *= sx;
-      s.y *= sy;
-    }
+  const sx = prevW ? w / prevW : 1;
+  const sy = prevH ? h / prevH : 1;
+
+  for (const s of stars) {
+    s.x *= sx;
+    s.y *= sy;
   }
 
   canvas.width = Math.floor(w * dpr);
@@ -105,79 +90,33 @@ function resize() {
   canvas.style.height = `${h}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
+
 window.addEventListener("resize", resize);
 resize();
 
-function drawDust(cx, cy, t) {
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  // slow rotation + tiny wobble so it doesn't feel "loop-y"
-  const rot = t * 0.03 + Math.sin(t * 0.17) * 0.03;
-  ctx.rotate(rot);
-
-  // Very faint "smoke" bands
-  ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.01; // overall intensity (tune 0.04..0.12)
-
-  const bands = 8;
-  const baseR = Math.min(w, h) * 0.12;
-  const step = Math.min(w, h) * 0.055;
-
-  for (let i = 0; i < bands; i++) {
-    const r = baseR + i * step;
-    const thick = 18 + i * 6;
-
-    ctx.beginPath();
-    ctx.lineWidth = thick;
-
-    // Slight offset per band so it looks layered
-    const phase = i * 0.9 + t * 0.12;
-
-    // Big arcs (not full circles) feel more "dust lane"
-    const start = 0.2 + Math.sin(phase) * 0.12;
-    const end = Math.PI * 1.55 + Math.cos(phase * 0.8) * 0.10;
-
-    ctx.strokeStyle = "rgba(160, 110, 255, 0.85)";
-    ctx.shadowColor = "rgba(160, 110, 255, 0.6)";
-    ctx.shadowBlur = 22;
-
-    ctx.arc(0, 0, r, start, end);
-    ctx.stroke();
-  }
-
-  // reset
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
-  ctx.shadowBlur = 0;
-  ctx.restore();
-}
-
-
 function drawBackground(t, dt) {
-  const step = Math.min(2, dt * 60); // normalize to ~60fps, clamp to avoid huge jumps
+
   const g = ctx.createRadialGradient(
     w * 0.55, h * 0.45, 0,
     w * 0.55, h * 0.45, Math.max(w, h)
   );
-  g.addColorStop(0, "rgba(32, 12, 55, 1)");
-  g.addColorStop(0.45, "rgba(10, 8, 24, 1)");
-  g.addColorStop(1, "rgba(0, 0, 0, 1)");
+
+  g.addColorStop(0, "rgba(32,12,55,1)");
+  g.addColorStop(0.45, "rgba(10,8,24,1)");
+  g.addColorStop(1, "rgba(0,0,0,1)");
+
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // dust layer (faint, rotating)
-  drawDust(w * 0.55, h * 0.50, t);
-
-  // --- Spiral / forward motion feel ---
   const cx = w * 0.52;
   const cy = h * 0.52;
 
-  const swirl = 0.0001;   // rotation strength
-  const drift = 0.02;     // forward travel strength
+  const swirl = 0.00011;
+  const drift = 0.018;
+
+  const step = Math.min(2, dt * 60);
 
   for (const s of stars) {
-    s.life = Math.min(1, s.life + s.grow);
 
     const dx = s.x - cx;
     const dy = s.y - cy;
@@ -186,79 +125,41 @@ function drawBackground(t, dt) {
     const inv = 1 / dist;
 
     const tx = -dy * inv;
-    const ty =  dx * inv;
-    const rx =  dx * inv;
-    const ry =  dy * inv;
+    const ty = dx * inv;
+
+    const rx = dx * inv;
+    const ry = dy * inv;
 
     const k = s.speed;
 
     s.x += ((tx * swirl * k * 900) + (rx * drift * k)) * step;
     s.y += ((ty * swirl * k * 900) + (ry * drift * k)) * step;
 
-    if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
+    if (s.x < -120 || s.x > w + 120 || s.y < -120 || s.y > h + 120) {
       respawnStar(s, cx, cy);
     }
 
-    const dCenter = Math.hypot(s.x - cx, s.y - cy);
-    if (dCenter > Math.max(w, h) * 0.85) {
-      respawnStar(s, cx, cy);
-    }
+    const tw = 0.85 + 0.15 * Math.sin(t * 1.4 + s.phase);
+    const alpha = s.a * tw;
 
-    const tw = 0.8 + 0.2 * Math.sin(t * 1.2 + s.phase);
-    const alpha = s.a * tw * (0.15 + 0.85 * s.life);
-
-    if (s.z > 0.93) {
-      const len = 2 + s.z * 6;
-
-      ctx.beginPath();
-      ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.75})`;
-      ctx.lineWidth = 0.5 + s.z * 0.6;
-      ctx.lineCap = "round";
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - rx * len, s.y - ry * len);
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
-    } else {
-      if (s.z > 0.78) {
-        ctx.shadowColor = "rgba(220,210,255,0.5)";
-        ctx.shadowBlur = 8;
-      } else {
-        ctx.shadowBlur = 0;
-      }
-
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(220,210,255,${alpha})`;
-      ctx.arc(s.x, s.y, s.r * (0.35 + 0.65 * s.life), 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.shadowBlur = 0;
-    }
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(220,210,255,${alpha})`;
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
   }
-
-  // soft nebula haze (outside loop)
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = "rgba(145, 70, 255, 1)";
-  ctx.beginPath();
-  ctx.arc(w * 0.25, h * 0.35, Math.min(w, h) * 0.28, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(60, 160, 255, 1)";
-  ctx.beginPath();
-  ctx.arc(w * 0.72, h * 0.62, Math.min(w, h) * 0.22, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = 1;
 }
 
 function orbitPoint(t) {
+
   const cx = w * 0.52;
   const cy = h * 0.52;
+
   const rx = Math.min(w, h) * 0.28;
   const ry = Math.min(w, h) * 0.18;
 
-  const wobble = Math.sin(t * 2 * Math.PI) * 0.02;
-  const angle = t * 2 * Math.PI;
+  const wobble = Math.sin(t * Math.PI * 2) * 0.02;
+
+  const angle = t * Math.PI * 2;
 
   const x = cx + Math.cos(angle) * rx;
   const y = cy + Math.sin(angle + wobble) * ry;
@@ -267,203 +168,111 @@ function orbitPoint(t) {
 }
 
 function drawOrbit(cx, cy, rx, ry) {
+
   ctx.save();
   ctx.translate(cx, cy);
 
-  ctx.strokeStyle = "rgba(180, 120, 255, 0.18)";
+  ctx.strokeStyle = "rgba(180,120,255,0.18)";
   ctx.lineWidth = 10;
   ctx.beginPath();
-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(220, 210, 255, 0.35)";
+  ctx.strokeStyle = "rgba(220,210,255,0.35)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);
   ctx.stroke();
-
-  ctx.strokeStyle = "rgba(220, 210, 255, 0.22)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < SECTORS; i += 3) {
-    const a = (i / SECTORS) * Math.PI * 2;
-    const x1 = Math.cos(a) * (rx - 2);
-    const y1 = Math.sin(a) * (ry - 2);
-    const x2 = Math.cos(a) * (rx + 6);
-    const y2 = Math.sin(a) * (ry + 6);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
 
   ctx.restore();
 }
 
 function drawComet(x, y, vx, vy) {
+
   ctx.save();
 
   const tailLen = 26;
-  const mag = Math.max(0.001, Math.hypot(vx, vy));
-  const tx = (vx / mag) * -tailLen;
-  const ty = (vy / mag) * -tailLen;
 
-  const lg = ctx.createLinearGradient(x, y, x + tx, y + ty);
-  lg.addColorStop(0, "rgba(255, 180, 255, 0.85)");
-  lg.addColorStop(1, "rgba(120, 160, 255, 0)");
+  const mag = Math.max(0.001, Math.hypot(vx,vy));
+
+  const tx = (vx/mag) * -tailLen;
+  const ty = (vy/mag) * -tailLen;
+
+  const lg = ctx.createLinearGradient(x,y,x+tx,y+ty);
+  lg.addColorStop(0,"rgba(255,180,255,0.85)");
+  lg.addColorStop(1,"rgba(120,160,255,0)");
 
   ctx.strokeStyle = lg;
   ctx.lineWidth = 6;
   ctx.lineCap = "round";
+
   ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + tx, y + ty);
+  ctx.moveTo(x,y);
+  ctx.lineTo(x+tx,y+ty);
   ctx.stroke();
 
-  ctx.shadowColor = "rgba(170, 120, 255, 0.9)";
+  ctx.shadowColor = "rgba(170,120,255,0.9)";
   ctx.shadowBlur = 18;
-  ctx.fillStyle = "rgba(245, 235, 255, 0.95)";
+
+  ctx.fillStyle = "rgba(245,235,255,0.95)";
   ctx.beginPath();
-  ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+  ctx.arc(x,y,4.2,0,Math.PI*2);
   ctx.fill();
 
   ctx.restore();
 }
 
 let lastMs = 0;
-
-
-// --- Orbit markers (planet checkpoints) ---
-const markers = [
-  { t: 0.12, name: "☉ Sun Gate" },
-  { t: 0.38, name: "☾ Moon Gate" },
-  { t: 0.67, name: "♂ Mars Gate" }
-];
-let checkpointCooldown = 0; // seconds
-let checkpointFlash = 0;    // 0..1
 let animT = 0;
 let orbitRotation = 0;
 
-let checkpointHold = 0;                 // seconds to keep text visible
-const wasNearMarker = markers.map(() => false);
+function tick(ms){
 
-function tick(ms) {
-  // 1) compute dt (seconds since last frame)
-  if (!lastMs) lastMs = ms;
-  const dt = ((ms - lastMs) / 1000) * SPEED_MULT;
+  if(!lastMs) lastMs = ms;
+
+  const dt = (ms - lastMs)/1000;
   lastMs = ms;
 
-  // 2) advance our animation clocks
   animT += dt;
-  orbitRotation += dt * 0.20;
+  orbitRotation += dt * 0.2;
 
-  // 3) compute "real time" epoch progress (for HUD + comet)
-  const realNow = Date.now() / 1000;
+  const realNow = Date.now()/1000;
+
   const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
-  const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
 
-  // 4) update HUD
-  epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
-  sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
-  barFill.style.width = `${epochProgress * 100}%`;
+  const sector = Math.floor(epochProgress * SECTORS);
 
-  // 5) draw scene
-  ctx.clearRect(0, 0, w, h);
+  epochEl.textContent = Math.floor(realNow / EPOCH_SECONDS);
+  sectorEl.textContent = `${sector+1} / ${SECTORS}`;
 
-  // IMPORTANT: pass BOTH animT and dt
-  drawBackground(animT, dt);
+  barFill.style.width = `${epochProgress*100}%`;
+
+  ctx.clearRect(0,0,w,h);
+
+  drawBackground(animT,dt);
 
   const p = orbitPoint(epochProgress);
 
-  // rotate the orbit group
   ctx.save();
-  ctx.translate(p.cx, p.cy);
+
+  ctx.translate(p.cx,p.cy);
   ctx.rotate(orbitRotation);
-  ctx.translate(-p.cx, -p.cy);
+  ctx.translate(-p.cx,-p.cy);
 
-  // 3 rings
-  drawOrbit(p.cx, p.cy, p.rx * 0.75, p.ry * 0.75);
-  drawOrbit(p.cx, p.cy, p.rx, p.ry);
-  drawOrbit(p.cx, p.cy, p.rx * 1.35, p.ry * 1.35);
+  drawOrbit(p.cx,p.cy,p.rx*0.75,p.ry*0.75);
+  drawOrbit(p.cx,p.cy,p.rx,p.ry);
+  drawOrbit(p.cx,p.cy,p.rx*1.35,p.ry*1.35);
 
-  // comet velocity
-  const p2 = orbitPoint((epochProgress + 0.002) % 1);
+  const p2 = orbitPoint((epochProgress+0.002)%1);
+
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // marker triggers (edge trigger)
-  for (let i = 0; i < markers.length; i++) {
-    const m = markers[i];
-    const mp = orbitPoint(m.t);
-
-    const d = Math.hypot(p.x - mp.x, p.y - mp.y);
-    const triggerDist = Math.min(w, h) * 0.035;
-    const near = d < triggerDist;
-
-    if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
-      checkpointCooldown = 1.0;
-      checkpointHold = 1.6;
-      checkpointFlash = 1.0;
-      subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
-    }
-    wasNearMarker[i] = near;
-  }
-
-  // marker dots (visual)
-  for (const m of markers) {
-    const mp = orbitPoint(m.t);
-    ctx.beginPath();
-    ctx.fillStyle = "rgba(255,210,120,0.9)";
-    ctx.shadowColor = "rgba(255,210,120,0.9)";
-    ctx.shadowBlur = 14;
-    ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.shadowBlur = 0;
-
-  // triangle lines
-  if (markers.length >= 3) {
-    const pts = markers.map(m => orbitPoint(m.t));
-    ctx.shadowColor = "rgba(255,200,150,0.6)";
-    ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(255,210,150,0.25)";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(pts[1].x, pts[1].y);
-    ctx.lineTo(pts[2].x, pts[2].y);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // comet (still rotated)
-  drawComet(p.x, p.y, vx, vy);
+  drawComet(p.x,p.y,vx,vy);
 
   ctx.restore();
 
-  // HUD timing fade
-  checkpointCooldown = Math.max(0, checkpointCooldown - dt);
-  checkpointHold = Math.max(0, checkpointHold - dt);
-
-  if (checkpointHold > 0) {
-    checkpointFlash = 1.0;
-  } else {
-    checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
-  }
-
-  if (checkpointFlash > 0) {
-    const a = 0.55 + 0.45 * checkpointFlash;
-    subEl.style.color = `rgba(255, 140, 140, ${a})`;
-    subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
-  } else {
-    subEl.style.color = "";
-    subEl.style.textShadow = "";
-    if (subEl.textContent.startsWith("CHECKPOINT")) {
-      subEl.textContent = "Stage 0 • Visual simulation";
-    }
-  }
-
   requestAnimationFrame(tick);
-} 
+}
 
-requestAnimationFrame(tick); // starts the loop
+requestAnimationFrame(tick);
