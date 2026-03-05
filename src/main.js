@@ -464,3 +464,4 @@ function tick(ms) {
   }
 
   requestAnimationFrame(tick);
+}
