@@ -33,33 +33,6 @@ let sectorEl = document.getElementById("sector");
 let barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 
-
-  ctx.save();
-  ctx.translate(cx, cy);
-
-  ctx.shadowColor = "rgba(255, 80, 80, 0.9)";
-  ctx.shadowBlur = glow;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = `rgba(255, 90, 90, ${0.75 + 0.2 * pulse})`;
-
-  const sides = 7;
-  ctx.beginPath();
-  for (let i = 0; i <= sides; i++) {
-    const a = (i / sides) * Math.PI * 2 + t * 0.25;
-    const x = Math.cos(a) * size;
-    const y = Math.sin(a) * size;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = `rgba(255, 60, 60, ${0.06 + 0.06 * pulse})`;
-  ctx.fill();
-
-  ctx.restore();
-}
 // ======= PARAMETERS (tune later) =======
 const EPOCH_SECONDS = 24 * 60 * 60; // 24h
 const SECTORS = 90;                // 90 sectors
@@ -241,6 +214,9 @@ let checkpointFlash = 0;    // 0..1
 let animT = 0;
 let orbitRotation = 0;
 
+let checkpointHold = 0;                 // seconds to keep text visible
+const wasNearMarker = markers.map(() => false);
+
 function tick() {
 
   if (!epochEl || !sectorEl || !barFill) {
@@ -286,20 +262,27 @@ barFill.style.width = `${epochProgress * 100}%`;
 
   
   // draw orbit markers
-for (const m of markers) {
+
+for (let i = 0; i < markers.length; i++) {
+  const m = markers[i];
   const mp = orbitPoint(m.t);
 
-  ctx.beginPath();
-  ctx.fillStyle = "rgba(255,210,120,0.9)";
-  ctx.shadowColor = "rgba(255,210,120,0.9)";
-  ctx.shadowBlur = 14;
-  ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
-  ctx.fill();
+  const dxm = p.x - mp.x;
+  const dym = p.y - mp.y;
+  const d = Math.hypot(dxm, dym);
 
-  ctx.shadowColor = "rgba(255,200,120,0.8)";
-  ctx.shadowBlur = 10;
+  const triggerDist = Math.min(w, h) * 0.035;
+  const near = d < triggerDist;
+
+  if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
+    checkpointCooldown = 1.0;
+    checkpointHold = 1.6;     // readable
+    checkpointFlash = 1.0;
+    if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+  }
+
+  wasNearMarker[i] = near;
 }
-  ctx.shadowBlur = 0;
 
 
   // --- celestial geometry lines (astrolabe look) ---
@@ -347,7 +330,12 @@ for (const m of markers) {
 
 // decrease timers
 checkpointCooldown = Math.max(0, checkpointCooldown - dt);
-checkpointFlash = Math.max(0, checkpointFlash - dt * 2.5);
+checkpointHold = Math.max(0, checkpointHold - dt);
+if (checkpointHold > 0) {
+  checkpointFlash = 1.0;
+} else {
+  checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
+}
 
 // apply flash styling to HUD while active
 if (subEl) {
