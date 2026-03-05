@@ -47,7 +47,7 @@ let prevH = 0;
 // --- Starfield ---
 const z = Math.random(); // depth
 // --- Starfield (spiral + subtle warp + fade-in) ---
-const stars = Array.from({ length: 340 }, () => {
+const stars = Array.from({ length: 520 }, () => {
   const z = Math.random();              // 0..1 depth (0 far, 1 near)
   const speed = 0.25 + z * 1.25;        // near stars move faster
 
@@ -152,7 +152,7 @@ function drawBackground() {
 // ALSO: if a star has drifted *too far* from the center, recycle it
 // (prevents "empty patches" after long spirals)
 const dCenter = Math.hypot(s.x - cx, s.y - cy);
-if (dCenter > Math.max(w, h) * 0.95) {
+if (dCenter > Math.max(w, h) * 0.85) {
   respawnStar(s, cx, cy);
 }
 
