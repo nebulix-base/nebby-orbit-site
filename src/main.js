@@ -811,20 +811,43 @@ function tick(ms) {
 
   if (claimReadyName) subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
 
-  if (markers.length >= 3) {
-    const pts = markers.map((m) => orbitPoint(m.t));
-    ctx.shadowColor = "rgba(255,200,150,0.6)";
-    ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(255,210,150,0.22)";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(pts[1].x, pts[1].y);
-    ctx.lineTo(pts[2].x, pts[2].y);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
+  // Apex triangle (celestial mechanism)
+if (markers.length >= 3) {
+  const pts = markers.map((m) => orbitPoint(m.t));
+
+  // slow breathing pulse
+  const pulse = 0.55 + 0.45 * Math.sin(animT * 0.35);
+
+  ctx.save();
+
+  // soft outer glow
+  ctx.shadowColor = "rgba(255,200,170,0.65)";
+  ctx.shadowBlur = 14 * pulse;
+
+  ctx.strokeStyle = `rgba(255,210,170,${0.18 + pulse * 0.12})`;
+  ctx.lineWidth = 1.4;
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  ctx.lineTo(pts[1].x, pts[1].y);
+  ctx.lineTo(pts[2].x, pts[2].y);
+  ctx.closePath();
+  ctx.stroke();
+
+  // inner energy filament
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(255,235,210,${0.28 + pulse * 0.22})`;
+  ctx.lineWidth = 0.9;
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  ctx.lineTo(pts[1].x, pts[1].y);
+  ctx.lineTo(pts[2].x, pts[2].y);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.restore();
+}
 
   for (const m of markers) {
     const mp = orbitPoint(m.t);
