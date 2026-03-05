@@ -104,8 +104,8 @@ function drawBackground() {
   const cy = h * 0.50;
 
   // feel controls (tune these)
-  const swirl = 0.0032;  // rotation strength
-  const drift = 0.32;    // "flying forward" strength
+  const swirl = 0.0016;  // rotation strength
+  const drift = 0.22;    // "flying forward" strength
 
   for (const s of stars) {
     // fade in instead of popping
@@ -141,25 +141,29 @@ function drawBackground() {
     }
 
     const tw = 0.75 + 0.25 * Math.sin(animT * 1.4 + s.phase);
-    const alpha = s.a * tw * s.life;
+    const alpha = (0.25 + 0.75 * s.a) * tw * (0.35 + 0.65 * s.life);
 
     // near stars become streaks (warp)
-    if (s.z > 0.72) {
-      const len = 10 + s.z * 28;
-
-      ctx.beginPath();
-      ctx.strokeStyle = `rgba(220,210,255,${alpha})`;
-      ctx.lineWidth = 0.7 + s.z * 1.6;
-      ctx.lineCap = "round";
-
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - rx * len, s.y - ry * len);
-      ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.fillStyle = `rgba(220,210,255,${alpha})`;
-      ctx.arc(s.x, s.y, s.r * s.life, 0, Math.PI * 2);
-      ctx.fill();
+    if (s.z > 0.90) {
+     // near stars become subtle streaks (warp)
+    const len = 4 + s.z * 10;          // short streaks (not straws)
+  ctx.beginPath();
+  ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.85})`;
+  ctx.lineWidth = 0.6;               // keep thin
+  ctx.lineCap = "round";
+  ctx.moveTo(s.x, s.y);
+  ctx.lineTo(s.x - rx * len, s.y - ry * len);
+  ctx.stroke();
+    } else if (s.z > 0.75) {
+  ctx.shadowColor = "rgba(220,210,255,0.6)";
+  ctx.shadowBlur = 10;
+} else {
+  ctx.shadowBlur = 0;
+}{
+  ctx.beginPath();
+  ctx.fillStyle = `rgba(220,210,255,${alpha})`;
+  ctx.arc(s.x, s.y, s.r * (0.5 + 0.5 * s.life), 0, Math.PI * 2);
+  ctx.fill();
     }
   }
 
