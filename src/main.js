@@ -284,7 +284,19 @@ for (let i = 0; i < markers.length; i++) {
   wasNearMarker[i] = near;
 }
 
+// --- draw orbit marker dots (visual) ---
+for (const m of markers) {
+  const mp = orbitPoint(m.t);
 
+  ctx.beginPath();
+  ctx.fillStyle = "rgba(255,210,120,0.9)";
+  ctx.shadowColor = "rgba(255,210,120,0.9)";
+  ctx.shadowBlur = 14;
+  ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+ctx.shadowBlur = 0;
+  
   // --- celestial geometry lines (astrolabe look) ---
 if (markers.length >= 3) {
   const pts = markers.map(m => orbitPoint(m.t));
@@ -309,8 +321,10 @@ if (markers.length >= 3) {
 
   ctx.restore();
 
-// --- Planet checkpoint triggers ---
-for (const m of markers) {
+
+// --- marker checkpoint triggers (edge-trigger) ---
+for (let i = 0; i < markers.length; i++) {
+  const m = markers[i];
   const mp = orbitPoint(m.t);
 
   const dxm = p.x - mp.x;
@@ -318,14 +332,19 @@ for (const m of markers) {
   const d = Math.hypot(dxm, dym);
 
   const triggerDist = Math.min(w, h) * 0.035;
+  const near = d < triggerDist;
 
-  if (d < triggerDist && checkpointCooldown === 0) {
-    checkpointCooldown = 2.0;
+  if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
+    checkpointCooldown = 1.0;
+    checkpointHold = 1.6;
     checkpointFlash = 1.0;
-
     if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
   }
+
+  wasNearMarker[i] = near;
 }
+  
+
   
 
 // decrease timers
