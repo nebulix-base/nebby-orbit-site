@@ -147,24 +147,32 @@ function drawBackground() {
     if (s.z > 0.90) {
      // near stars become subtle streaks (warp)
     const len = 4 + s.z * 10;          // short streaks (not straws)
+  
   ctx.beginPath();
   ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.85})`;
   ctx.lineWidth = 0.6;               // keep thin
   ctx.lineCap = "round";
+  
   ctx.moveTo(s.x, s.y);
   ctx.lineTo(s.x - rx * len, s.y - ry * len);
   ctx.stroke();
-    } else if (s.z > 0.75) {
-  ctx.shadowColor = "rgba(220,210,255,0.6)";
-  ctx.shadowBlur = 10;
-} else {
-  ctx.shadowBlur = 0;
-}{
+
+  ctx.shadowBlur = 0;  // <-- reset after streak    
+  } else {
+
+  // glow only on nearer dot stars
+  if (s.z > 0.75) {
+    ctx.shadowColor = "rgba(220,210,255,0.6)";
+    ctx.shadowBlur = 10;
+  } else {
+    ctx.shadowBlur = 0;
+  }
   ctx.beginPath();
   ctx.fillStyle = `rgba(220,210,255,${alpha})`;
   ctx.arc(s.x, s.y, s.r * (0.5 + 0.5 * s.life), 0, Math.PI * 2);
   ctx.fill();
-    }
+  
+  ctx.shadowBlur = 0;  // <-- reset after dot
   }
 
   // soft nebula haze
