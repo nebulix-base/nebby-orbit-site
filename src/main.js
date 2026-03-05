@@ -285,7 +285,7 @@ function tick(ms) {
   lastMs = ms;
 
   animT += dt;
-  orbitRotation += dt * 0.10; // smooth visible spin
+  orbitRotation += dt * 0.08; // smooth visible spin
 
   // HUD time
   const realNow = Date.now() / 1000;
