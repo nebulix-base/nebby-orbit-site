@@ -242,6 +242,7 @@ const markers = [
 let checkpointCooldown = 0; // seconds
 let checkpointFlash = 0;    // 0..1
 let animT = 0;
+let orbitRotation = 0;
 
 function tick() {
 
@@ -256,6 +257,7 @@ function tick() {
   last = tNow;
   
   animT += dt;
+  orbitRotation += dt * 0.05;
   
 const epochProgress = (tNow % EPOCH_SECONDS) / EPOCH_SECONDS;
 const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
@@ -275,12 +277,14 @@ redpoly.y = h * 0.38;
   
   const p = orbitPoint(epochProgress);
 
+  ctx.save();
+  ctx.translate(p.cx, p.cy);
+  ctx.rotate(orbitRotation);
+  ctx.translate(-p.cx, -p.cy);
 // inner orbit
   drawOrbit(p.cx, p.cy, p.rx * 0.75, p.ry * 0.75);
-
 // main orbit
   drawOrbit(p.cx, p.cy, p.rx, p.ry);
-
 // outer orbit
   drawOrbit(p.cx, p.cy, p.rx * 1.35, p.ry * 1.35);
 
@@ -288,6 +292,7 @@ redpoly.y = h * 0.38;
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
+  
   // draw orbit markers
 for (const m of markers) {
   const mp = orbitPoint(m.t);
@@ -302,10 +307,12 @@ for (const m of markers) {
   ctx.shadowColor = "rgba(255,200,120,0.8)";
   ctx.shadowBlur = 10;
 }
-ctx.shadowBlur = 0;
+  ctx.shadowBlur = 0;
   
   drawComet(p.x, p.y, vx, vy);
 
+  ctx.restore();
+  
   // --- celestial geometry lines (astrolabe look) ---
 if (markers.length >= 3) {
   const pts = markers.map(m => orbitPoint(m.t));
