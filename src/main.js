@@ -111,6 +111,52 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
+function drawDust(cx, cy, t) {
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // slow rotation + tiny wobble so it doesn't feel "loop-y"
+  const rot = t * 0.03 + Math.sin(t * 0.17) * 0.03;
+  ctx.rotate(rot);
+
+  // Very faint "smoke" bands
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.07; // overall intensity (tune 0.04..0.12)
+
+  const bands = 8;
+  const baseR = Math.min(w, h) * 0.12;
+  const step = Math.min(w, h) * 0.055;
+
+  for (let i = 0; i < bands; i++) {
+    const r = baseR + i * step;
+    const thick = 18 + i * 6;
+
+    ctx.beginPath();
+    ctx.lineWidth = thick;
+
+    // Slight offset per band so it looks layered
+    const phase = i * 0.9 + t * 0.12;
+
+    // Big arcs (not full circles) feel more "dust lane"
+    const start = 0.2 + Math.sin(phase) * 0.12;
+    const end = Math.PI * 1.55 + Math.cos(phase * 0.8) * 0.10;
+
+    ctx.strokeStyle = "rgba(160, 110, 255, 0.85)";
+    ctx.shadowColor = "rgba(160, 110, 255, 0.6)";
+    ctx.shadowBlur = 22;
+
+    ctx.arc(0, 0, r, start, end);
+    ctx.stroke();
+  }
+
+  // reset
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+
 function drawBackground() {
   const g = ctx.createRadialGradient(
     w * 0.55, h * 0.45, 0,
@@ -122,6 +168,7 @@ function drawBackground() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
+  drawDust(w * 0.55, h * 0.50, animT);
   // --- Spiral / forward motion feel ---
   const cx = w * 0.52;
   const cy = h * 0.52;
