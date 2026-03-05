@@ -849,39 +849,106 @@ if (markers.length >= 3) {
   ctx.restore();
 }
 
-  for (const m of markers) {
-    const mp = orbitPoint(m.t);
+ // draw gate dots + labels that reveal when close (Apex has distinct energy)
+for (const m of markers) {
+  const mp = orbitPoint(m.t);
 
-    const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
-    const revealStart = Math.min(w, h) * 0.22;
-    const revealEnd = Math.min(w, h) * 0.07;
-    const aLabel = clamp01((revealStart - dist) / Math.max(1e-6, revealStart - revealEnd));
+  const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
+  const revealStart = Math.min(w, h) * 0.22;
+  const revealEnd = Math.min(w, h) * 0.07;
+  const aLabel = clamp01(
+    (revealStart - dist) / Math.max(1e-6, revealStart - revealEnd)
+  );
 
-    ctx.beginPath();
-    ctx.fillStyle = "rgba(255,210,120,0.92)";
-    ctx.shadowColor = "rgba(255,210,120,0.9)";
-    ctx.shadowBlur = 14;
-    ctx.arc(mp.x, mp.y, 5, 0, Math.PI * 2);
-    ctx.fill();
+  // base "near" detection for gate-specific pulsing (doesn't change your checkpoint logic)
+  const nearFrac = clamp01((revealStart - dist) / Math.max(1e-6, revealStart));
+  const isApex = m.name.includes("Apex");
+  const isMoon = m.name.includes("Moon");
+  const isSun = m.name.includes("Sun");
+
+  // slow pulse base
+  const basePulse = 0.70 + 0.30 * Math.sin(animT * (isApex ? 0.95 : 0.65));
+
+  // gate palette
+  let dotFill = "rgba(255,210,120,0.92)";
+  let dotGlow = "rgba(255,210,120,0.9)";
+  let dotGlowBlur = 14;
+
+  if (isMoon) {
+    dotFill = "rgba(220,235,255,0.92)";
+    dotGlow = "rgba(200,220,255,0.9)";
+    dotGlowBlur = 15;
+  } else if (isApex) {
+    dotFill = "rgba(210,170,255,0.92)";
+    dotGlow = "rgba(200,140,255,0.95)";
+    dotGlowBlur = 18;
+  } else if (isSun) {
+    // keep sun warm/gold (already default)
+    dotGlowBlur = 15;
+  }
+
+  // dot
+  ctx.save();
+  ctx.shadowColor = dotGlow;
+  ctx.shadowBlur = dotGlowBlur * (0.85 + 0.55 * basePulse);
+
+  ctx.beginPath();
+  ctx.fillStyle = dotFill;
+  ctx.arc(mp.x, mp.y, 5.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Apex halo ring when approaching (celestial "claim energy")
+  if (isApex) {
+    const haloA = (0.10 + 0.18 * basePulse) * (0.25 + 0.75 * nearFrac);
+    const haloR = 10 + 10 * basePulse + 18 * nearFrac;
+
     ctx.shadowBlur = 0;
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = `rgba(210,160,255,${haloA})`;
+    ctx.beginPath();
+    ctx.arc(mp.x, mp.y, haloR, 0, Math.PI * 2);
+    ctx.stroke();
 
-    if (aLabel > 0.02) {
-      ctx.save();
-      ctx.globalAlpha = 0.25 + 0.75 * aLabel;
-      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    // faint inner ring
+    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = `rgba(240,220,255,${haloA * 0.75})`;
+    ctx.beginPath();
+    ctx.arc(mp.x, mp.y, haloR * 0.78, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  // label
+  if (aLabel > 0.02) {
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.75 * aLabel;
+    ctx.font =
+      "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+
+    // label color follows gate palette
+    if (isApex) {
+      ctx.fillStyle = "rgba(245,230,255,0.92)";
+      ctx.shadowColor = "rgba(210,160,255,0.75)";
+    } else if (isMoon) {
+      ctx.fillStyle = "rgba(235,245,255,0.92)";
+      ctx.shadowColor = "rgba(190,215,255,0.7)";
+    } else {
       ctx.fillStyle = "rgba(255,235,245,0.9)";
       ctx.shadowColor = "rgba(255,190,230,0.65)";
-      ctx.shadowBlur = 10;
-
-      const ang = m.t * Math.PI * 2;
-      const n = ellipseOutNormal(p.rx, p.ry, ang);
-      const ox = n.nx * 18;
-      const oy = n.ny * 18;
-
-      ctx.fillText(m.name, mp.x + ox, mp.y + oy);
-      ctx.restore();
     }
+
+    ctx.shadowBlur = 10;
+
+    const ang = m.t * Math.PI * 2;
+    const n = ellipseOutNormal(p.rx, p.ry, ang);
+    const ox = n.nx * 18;
+    const oy = n.ny * 18;
+
+    ctx.fillText(m.name, mp.x + ox, mp.y + oy);
+    ctx.restore();
   }
+}
 
   drawComet(p.x, p.y, vx, vy, warpBoost);
 
