@@ -47,7 +47,7 @@ let prevH = 0;
 // --- Starfield ---
 const z = Math.random(); // depth
 // --- Starfield (spiral + subtle warp + fade-in) ---
-const stars = Array.from({ length: 520 }, () => {
+const stars = Array.from({ length: 460 }, () => {
   const z = Math.random();              // 0..1 depth (0 far, 1 near)
   const speed = 0.25 + z * 1.25;        // near stars move faster
 
@@ -66,11 +66,18 @@ const stars = Array.from({ length: 520 }, () => {
 
 function respawnStar(s, cx, cy) {
   // spawn near the center, not on a far ring
-  const ang = Math.random() * Math.PI * 2;
+  const arms = 3;                         // number of spiral arms
+  const arm = Math.floor(Math.random() * arms);
+  const armOffset = (Math.PI * 2 / arms) * arm;
+
+  const ang = armOffset + (Math.random() - 0.5) * 0.6;
   const rad = 4 + Math.random() * 25; // tight spawn radius
 
-  s.x = cx + Math.cos(ang) * rad;
-  s.y = cy + Math.sin(ang) * rad;
+  const twist = rad * 0.015;
+  const finalAngle = ang + twist;
+
+  s.x = cx + Math.cos(finalAngle) * rad;
+  s.y = cy + Math.sin(finalAngle) * rad;
 
   s.life = 0;               // fade in (prevents pop)
   s.phase = Math.random() * Math.PI * 2;
