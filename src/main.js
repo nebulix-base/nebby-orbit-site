@@ -32,9 +32,7 @@ let epochEl = document.getElementById("epoch");
 let sectorEl = document.getElementById("sector");
 let barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
-function drawRedPoly(cx, cy, size, t) {
-  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
-  const glow = 12 + pulse * 18;
+
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -231,8 +229,7 @@ function nowSec() {
 
 let last = nowSec();
 
-// --- RedPoly checkpoint ---
-const redpoly = { x: 0, y: 0 };
+
 // --- Orbit markers (planet checkpoints) ---
 const markers = [
   { t: 0.12, name: "☉ Sun Gate" },
@@ -268,12 +265,7 @@ barFill.style.width = `${epochProgress * 100}%`;
 
   ctx.clearRect(0, 0, w, h);
   drawBackground();
-  // RedPoly position (fixed anchor in scene)
-redpoly.x = w * 0.20;
-redpoly.y = h * 0.38;
 
-// Draw RedPoly marker
-  drawRedPoly(redpoly.x, redpoly.y, Math.min(w, h) * 0.07, animT);
   
   const p = orbitPoint(epochProgress);
 
@@ -333,13 +325,6 @@ if (markers.length >= 3) {
   drawComet(p.x, p.y, vx, vy);
 
   ctx.restore();
-  
-
-  
-// --- Checkpoint logic: trigger when comet passes near RedPoly ---
-const dx = p.x - redpoly.x;
-const dy = p.y - redpoly.y;
-const dist = Math.hypot(dx, dy);
 
 // --- Planet checkpoint triggers ---
 for (const m of markers) {
@@ -359,20 +344,10 @@ for (const m of markers) {
   }
 }
   
-// threshold scales with screen size
-const threshold = Math.min(w, h) * 0.06; 
 
 // decrease timers
 checkpointCooldown = Math.max(0, checkpointCooldown - dt);
 checkpointFlash = Math.max(0, checkpointFlash - dt * 2.5);
-
-// trigger on near pass (and not spamming)
-if (dist < threshold && checkpointCooldown === 0) {
-  checkpointCooldown = 2.0; // seconds before it can trigger again
-  checkpointFlash = 1.0;    // start flash
-
-  if (subEl) subEl.textContent = "CHECKPOINT ✦ RedPoly reached";
-}
 
 // apply flash styling to HUD while active
 if (subEl) {
