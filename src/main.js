@@ -43,9 +43,6 @@ let w = 0, h = 0, dpr = Math.min(2, window.devicePixelRatio || 1);
 let prevW = 0;
 let prevH = 0;
 
-
-// --- Starfield ---
-const z = Math.random(); // depth
 // --- Starfield (spiral + subtle warp + fade-in) ---
 const stars = Array.from({ length: 460 }, () => {
   const z = Math.random();              // 0..1 depth (0 far, 1 near)
@@ -157,7 +154,7 @@ function drawDust(cx, cy, t) {
 }
 
 
-function drawBackground() {
+function drawBackground(t) {
   const g = ctx.createRadialGradient(
     w * 0.55, h * 0.45, 0,
     w * 0.55, h * 0.45, Math.max(w, h)
@@ -168,7 +165,9 @@ function drawBackground() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  drawDust(w * 0.55, h * 0.50, animT);
+  // dust layer (faint, rotating)
+  drawDust(w * 0.55, h * 0.50, t);
+
   // --- Spiral / forward motion feel ---
   const cx = w * 0.52;
   const cy = h * 0.52;
@@ -177,7 +176,6 @@ function drawBackground() {
   const drift = 0.02;     // forward travel strength
 
   for (const s of stars) {
-    // fade in instead of popping
     s.life = Math.min(1, s.life + s.grow);
 
     const dx = s.x - cx;
@@ -186,7 +184,6 @@ function drawBackground() {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-    // tangential + radial directions
     const tx = -dy * inv;
     const ty =  dx * inv;
     const rx =  dx * inv;
@@ -194,41 +191,34 @@ function drawBackground() {
 
     const k = s.speed;
 
-    // motion
     s.x += (tx * swirl * k * 900) + (rx * drift * k);
     s.y += (ty * swirl * k * 900) + (ry * drift * k);
 
-    // respawn offscreen and fade in again
-   if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
-  respawnStar(s, cx, cy);
-}
+    if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
+      respawnStar(s, cx, cy);
+    }
 
-// ALSO: if a star has drifted *too far* from the center, recycle it
-// (prevents "empty patches" after long spirals)
-const dCenter = Math.hypot(s.x - cx, s.y - cy);
-if (dCenter > Math.max(w, h) * 0.85) {
-  respawnStar(s, cx, cy);
-}
+    const dCenter = Math.hypot(s.x - cx, s.y - cy);
+    if (dCenter > Math.max(w, h) * 0.85) {
+      respawnStar(s, cx, cy);
+    }
 
-    const tw = 0.8 + 0.2 * Math.sin(animT * 1.2 + s.phase);
+    const tw = 0.8 + 0.2 * Math.sin(t * 1.2 + s.phase);
     const alpha = s.a * tw * (0.15 + 0.85 * s.life);
 
-    // Near stars: subtle short streaks (not straws)
     if (s.z > 0.93) {
-      const len = 2 + s.z * 6; // short streaks
+      const len = 2 + s.z * 6;
 
       ctx.beginPath();
       ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.75})`;
       ctx.lineWidth = 0.5 + s.z * 0.6;
       ctx.lineCap = "round";
-
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(s.x - rx * len, s.y - ry * len);
       ctx.stroke();
 
       ctx.shadowBlur = 0;
     } else {
-      // Optional glow on mid-near stars
       if (s.z > 0.78) {
         ctx.shadowColor = "rgba(220,210,255,0.5)";
         ctx.shadowBlur = 8;
@@ -243,9 +233,9 @@ if (dCenter > Math.max(w, h) * 0.85) {
 
       ctx.shadowBlur = 0;
     }
-  } // <-- IMPORTANT: closes the for-loop
+  }
 
-  // soft nebula haze (IMPORTANT: outside the loop)
+  // soft nebula haze (outside loop)
   ctx.globalAlpha = 0.12;
   ctx.fillStyle = "rgba(145, 70, 255, 1)";
   ctx.beginPath();
@@ -256,6 +246,7 @@ if (dCenter > Math.max(w, h) * 0.85) {
   ctx.beginPath();
   ctx.arc(w * 0.72, h * 0.62, Math.min(w, h) * 0.22, 0, Math.PI * 2);
   ctx.fill();
+
   ctx.globalAlpha = 1;
 }
 
@@ -381,7 +372,7 @@ sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
 barFill.style.width = `${epochProgress * 100}%`;
 
   ctx.clearRect(0, 0, w, h);
-  drawBackground();
+  drawBackground(animT);
 
   
   const p = orbitPoint(epochProgress);
