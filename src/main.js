@@ -50,8 +50,8 @@ const stars = Array.from({ length: 240 }, () => ({
   y: Math.random() * window.innerHeight,
   r: Math.random() * 1.6 + 0.2,
   a: Math.random() * 0.8 + 0.2,
-  vx: (Math.random() - 0.5) * 0.06,
-  vy: (Math.random() - 0.5) * 0.06,
+  vx: (Math.random() - 0.5) * 0.18,
+  vy: (Math.random() - 0.5) * 0.18,
 }));
 
 
