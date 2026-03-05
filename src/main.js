@@ -57,7 +57,7 @@ const SECTORS = 90;                // micro cadence within each epoch/day
 const ORBIT_EPOCHS = 90;           // macro cadence: 90 epochs = one “orbit”
 // ==============================================
 
-// Orbit spin: you said it's fine (leave as-is)
+// Orbit spin
 const ORBIT_SPIN_BASE = 0.07;
 const ORBIT_SPIN_WOBBLE = 0.015;
 const ORBIT_SPIN_WOBBLE_RATE = 0.2;
@@ -92,14 +92,14 @@ const TICK_MAJOR_LEN = 14;
 const ACTIVE_ARC_HALF_WINDOW_SECTORS = 1.5;
 const ACTIVE_ARC_STEPS = 42;
 
-// Gate sectors (fixed sector numbers, 0..SECTORS-1)
+// Gates (sector anchored)
 const GATES = [
   { sector: 0, name: "☉ Sun Gate" },
   { sector: 30, name: "☾ Moon Gate" },
   { sector: 60, name: "♂ Mars Gate" },
 ];
 
-// Claim window (visual only for now)
+// Claim window (visual only)
 const CLAIM_SECTOR_WINDOW = 1;
 
 // ===== CADENCE: MAJOR EVENTS ON EPOCH-IN-ORBIT =====
@@ -112,6 +112,15 @@ const MAJOR_LABELS = {
   75: "☀ Solar Flare",
   90: "⟲ Perihelion Reset",
 };
+
+// ===== EVENT FX SETTINGS =====
+const WARP_PULSE_SEC = 2.8;
+const WARP_PULSE_MAX_R = 0.22; // fraction of min(w,h)
+const WARP_PULSE_THICK = 3.5;
+
+const MAJOR_OVERLAY_SEC = 3.6;
+const MAJOR_OVERLAY_FADE_IN = 0.22;
+const MAJOR_OVERLAY_FADE_OUT = 0.55;
 // ===============================================
 
 let w = 0,
@@ -119,6 +128,52 @@ let w = 0,
   dpr = Math.min(2, window.devicePixelRatio || 1);
 let prevW = 0;
 let prevH = 0;
+
+// ---------------- DEV TIME OFFSET (FOR TESTING) ----------------
+// This does NOT change real-time logic; it just offsets the clock used by visuals/HUD.
+let devTimeOffsetSec = 0;
+
+window.addEventListener("keydown", (e) => {
+  const k = (e.key || "").toLowerCase();
+
+  if (k === "n") {
+    // simulate next epoch flip: move clock forward to just after next epoch boundary
+    const realNow = Date.now() / 1000 + devTimeOffsetSec;
+    const nextEpochStart = (Math.floor(realNow / EPOCH_SECONDS) + 1) * EPOCH_SECONDS;
+    devTimeOffsetSec += (nextEpochStart - realNow) + 0.25;
+  }
+
+  if (k === "m") {
+    // jump to next major epoch-in-orbit (fast test)
+    const realNow = Date.now() / 1000 + devTimeOffsetSec;
+    const epochIndex = Math.floor(realNow / EPOCH_SECONDS);
+    const epochInOrbit = (epochIndex % ORBIT_EPOCHS) + 1;
+
+    let target = null;
+    for (const eMajor of MAJOR_EPOCHS) {
+      if (epochInOrbit < eMajor) {
+        target = eMajor;
+        break;
+      }
+    }
+    if (target === null) target = 90;
+
+    let deltaEpochs = target - epochInOrbit;
+    if (deltaEpochs <= 0) deltaEpochs += ORBIT_EPOCHS;
+
+    // move to start of that epoch (plus a small epsilon)
+    devTimeOffsetSec += deltaEpochs * EPOCH_SECONDS;
+    // align close to boundary trigger by moving to just after the boundary
+    const now2 = Date.now() / 1000 + devTimeOffsetSec;
+    const nextEpochStart = (Math.floor(now2 / EPOCH_SECONDS)) * EPOCH_SECONDS;
+    devTimeOffsetSec += (nextEpochStart - now2) + 0.25;
+  }
+
+  if (k === "r") {
+    devTimeOffsetSec = 0;
+  }
+});
+// --------------------------------------------------------------
 
 // ---------------- UTIL ----------------
 function clamp01(v) {
@@ -139,7 +194,6 @@ function formatCountdown(seconds) {
   return `${m}m ${pad2(ss)}s`;
 }
 function roman(n) {
-  // 1..18 expected
   const map = [
     ["X", 10],
     ["IX", 9],
@@ -159,11 +213,11 @@ function roman(n) {
 }
 
 // Epoch/Orbit helpers
-function getEpochIndex(realNowSec) {
-  return Math.floor(realNowSec / EPOCH_SECONDS);
+function getEpochIndex(nowSec) {
+  return Math.floor(nowSec / EPOCH_SECONDS);
 }
-function getDayProgress(realNowSec) {
-  return (realNowSec % EPOCH_SECONDS) / EPOCH_SECONDS; // 0..1
+function getDayProgress(nowSec) {
+  return (nowSec % EPOCH_SECONDS) / EPOCH_SECONDS; // 0..1
 }
 function getEpochInOrbit(epochIndex) {
   return (epochIndex % ORBIT_EPOCHS) + 1; // 1..90
@@ -178,13 +232,9 @@ function getNextMajor(epochInOrbit) {
   return 90;
 }
 function secondsUntilEpochInOrbit(epochInOrbit, targetEpochInOrbit, dayProgress) {
-  // If target is current epoch, countdown to its end-of-epoch moment (or 0 at start)
-  // Here we define the event as "arrives when epoch flips into target epoch".
-  // So if we’re already in target epoch, next occurrence is next orbit cycle.
   let deltaEpochs = targetEpochInOrbit - epochInOrbit;
   if (deltaEpochs <= 0) deltaEpochs += ORBIT_EPOCHS;
 
-  // time remaining in current epoch/day + whole epochs after
   const remainingThisEpoch = (1 - dayProgress) * EPOCH_SECONDS;
   const fullEpochsAfter = Math.max(0, deltaEpochs - 1) * EPOCH_SECONDS;
 
@@ -478,17 +528,20 @@ function orbitPoint(t) {
   return { x, y, cx, cy, rx, ry };
 }
 
-function drawOrbit(cx, cy, rx, ry) {
+function drawOrbit(cx, cy, rx, ry, boost = 0) {
   ctx.save();
   ctx.translate(cx, cy);
 
-  ctx.strokeStyle = "rgba(180,120,255,0.18)";
+  const a1 = 0.18 + boost * 0.12;
+  const a2 = 0.35 + boost * 0.18;
+
+  ctx.strokeStyle = `rgba(180,120,255,${a1})`;
   ctx.lineWidth = 10;
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(220,210,255,0.35)";
+  ctx.strokeStyle = `rgba(220,210,255,${a2})`;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -497,7 +550,7 @@ function drawOrbit(cx, cy, rx, ry) {
   ctx.restore();
 }
 
-function drawComet(x, y, vx, vy) {
+function drawComet(x, y, vx, vy, glowBoost = 0) {
   ctx.save();
 
   const tailLen = 26;
@@ -506,7 +559,7 @@ function drawComet(x, y, vx, vy) {
   const ty = (vy / mag) * -tailLen;
 
   const lg = ctx.createLinearGradient(x, y, x + tx, y + ty);
-  lg.addColorStop(0, "rgba(255,180,255,0.85)");
+  lg.addColorStop(0, `rgba(255,180,255,${0.85 + glowBoost * 0.08})`);
   lg.addColorStop(1, "rgba(120,160,255,0)");
 
   ctx.strokeStyle = lg;
@@ -517,11 +570,11 @@ function drawComet(x, y, vx, vy) {
   ctx.lineTo(x + tx, y + ty);
   ctx.stroke();
 
-  ctx.shadowColor = "rgba(170,120,255,0.9)";
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = "rgba(245,235,255,0.95)";
+  ctx.shadowColor = `rgba(170,120,255,${0.9 + glowBoost * 0.08})`;
+  ctx.shadowBlur = 18 + glowBoost * 18;
+  ctx.fillStyle = `rgba(245,235,255,${0.95 + glowBoost * 0.03})`;
   ctx.beginPath();
-  ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+  ctx.arc(x, y, 4.2 + glowBoost * 0.7, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
@@ -539,6 +592,83 @@ let checkpointHold = 0;
 let checkpointFlash = 0;
 const wasNearMarker = markers.map(() => false);
 
+// ---------------- EVENT FX STATE ----------------
+let lastEpochIndex = null;
+
+let warpPulseLeft = 0;
+let warpPulseLabel = "";
+
+let majorOverlayLeft = 0;
+let majorOverlayLabel = "";
+
+function triggerWarpPulse(epochInOrbit) {
+  warpPulseLeft = WARP_PULSE_SEC;
+  warpPulseLabel = `WARP EVENT ✦ Warp ${roman(getWarpLevel(epochInOrbit))}`;
+  subEl.textContent = warpPulseLabel;
+}
+
+function triggerMajorOverlay(label) {
+  majorOverlayLeft = MAJOR_OVERLAY_SEC;
+  majorOverlayLabel = `PLANET PASS ✦ ${label}`;
+  subEl.textContent = majorOverlayLabel;
+}
+
+function drawWarpPulse(cx, cy, tNorm) {
+  const base = Math.min(w, h);
+  const r = base * (0.03 + (WARP_PULSE_MAX_R - 0.03) * tNorm);
+  const a = 0.26 * (1 - tNorm);
+
+  ctx.save();
+  ctx.shadowColor = "rgba(255,170,220,0.7)";
+  ctx.shadowBlur = 20 * (1 - tNorm);
+
+  ctx.strokeStyle = `rgba(255,180,230,${a})`;
+  ctx.lineWidth = WARP_PULSE_THICK;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(210,190,255,${a * 0.75})`;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.05, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawMajorOverlay(label, tLeft) {
+  const total = MAJOR_OVERLAY_SEC;
+  const t = 1 - tLeft / total; // 0..1
+
+  let a = 1;
+  if (t < MAJOR_OVERLAY_FADE_IN) a = t / MAJOR_OVERLAY_FADE_IN;
+  else if (t > 1 - MAJOR_OVERLAY_FADE_OUT) a = (1 - t) / MAJOR_OVERLAY_FADE_OUT;
+  a = clamp01(a);
+
+  const cx = w * 0.5;
+  const cy = h * 0.18;
+
+  ctx.save();
+  ctx.globalAlpha = a;
+
+  ctx.font = "700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  const text = label;
+  const tw = ctx.measureText(text).width;
+
+  ctx.fillStyle = "rgba(10,8,24,0.42)";
+  ctx.beginPath();
+  ctx.roundRect(cx - tw / 2 - 18, cy - 22, tw + 36, 44, 12);
+  ctx.fill();
+
+  ctx.shadowColor = "rgba(255,190,230,0.8)";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "rgba(255,235,250,0.92)";
+  ctx.fillText(text, cx - tw / 2, cy + 8);
+
+  ctx.restore();
+}
+
 // ---------------- MAIN LOOP ----------------
 let lastMs = 0;
 let animT = 0;
@@ -551,26 +681,36 @@ function tick(ms) {
 
   animT += dt;
 
-  // ===== CLOCKS =====
-  const realNow = Date.now() / 1000;
+  // ===== CLOCKS (REAL TIME + DEV OFFSET) =====
+  const now = Date.now() / 1000 + devTimeOffsetSec;
 
-  const epochIndex = getEpochIndex(realNow);
-  const dayProgress = getDayProgress(realNow); // 0..1
-  const epochInOrbit = getEpochInOrbit(epochIndex); // 1..90
-  const warpLevel = getWarpLevel(epochInOrbit);     // 1..18
+  const epochIndex = getEpochIndex(now);
+  const dayProgress = getDayProgress(now);
+  const epochInOrbit = getEpochInOrbit(epochIndex);
+  const warpLevel = getWarpLevel(epochInOrbit);
 
-  // Micro sectors inside the current epoch/day (drives orbit motion)
   const sector = Math.min(SECTORS - 1, Math.floor(dayProgress * SECTORS));
   const sectorWithin = dayProgress * SECTORS - sector;
 
-  // Next major event info
   const nextMajorEpoch = getNextMajor(epochInOrbit);
   const nextMajorLabel = MAJOR_LABELS[nextMajorEpoch] || `Epoch ${nextMajorEpoch}`;
-  const secondsToNextMajor = secondsUntilEpochInOrbit(
-    epochInOrbit,
-    nextMajorEpoch,
-    dayProgress
-  );
+  const secondsToNextMajor = secondsUntilEpochInOrbit(epochInOrbit, nextMajorEpoch, dayProgress);
+
+  // ===== EPOCH BOUNDARY DETECTOR =====
+  if (lastEpochIndex === null) lastEpochIndex = epochIndex;
+
+  if (epochIndex !== lastEpochIndex) {
+    const newEpochInOrbit = getEpochInOrbit(epochIndex);
+
+    if (newEpochInOrbit % 5 === 0) triggerWarpPulse(newEpochInOrbit);
+    if (MAJOR_LABELS[newEpochInOrbit]) triggerMajorOverlay(MAJOR_LABELS[newEpochInOrbit]);
+
+    lastEpochIndex = epochIndex;
+  }
+
+  // decrement FX timers
+  warpPulseLeft = Math.max(0, warpPulseLeft - dt);
+  majorOverlayLeft = Math.max(0, majorOverlayLeft - dt);
 
   // ===== HUD =====
   epochEl.textContent = `${epochInOrbit} / ${ORBIT_EPOCHS}`;
@@ -579,26 +719,26 @@ function tick(ms) {
   nextEventEl.textContent = nextMajorLabel;
   countdownEl.textContent = formatCountdown(secondsToNextMajor);
 
-  // bar shows day progress (epoch progress)
   barFill.style.width = `${dayProgress * 100}%`;
 
   // draw background + stars
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
-  // orbit position uses micro day progress for smooth motion
   const p = orbitPoint(dayProgress);
 
-  orbitRotation +=
-    dt *
-    (ORBIT_SPIN_BASE +
-      Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
+  orbitRotation += dt * (ORBIT_SPIN_BASE + Math.sin(animT * ORBIT_SPIN_WOBBLE_RATE) * ORBIT_SPIN_WOBBLE);
 
-  // rotate orbit group
   ctx.save();
   ctx.translate(p.cx, p.cy);
   ctx.rotate(orbitRotation);
   ctx.translate(-p.cx, -p.cy);
+
+  const warpPulseT = warpPulseLeft > 0 ? 1 - warpPulseLeft / WARP_PULSE_SEC : 0;
+  const warpBoost = warpPulseLeft > 0 ? (1 - warpPulseT) : 0;
+
+  const majorBoost = majorOverlayLeft > 0 ? 0.7 : 0;
+  const orbitBoost = Math.max(warpBoost * 0.9, majorBoost * 0.8);
 
   const rxInner = p.rx * 0.75;
   const ryInner = p.ry * 0.75;
@@ -607,14 +747,12 @@ function tick(ms) {
   const rxOuter = p.rx * 1.35;
   const ryOuter = p.ry * 1.35;
 
-  drawOrbit(p.cx, p.cy, rxInner, ryInner);
-  drawOrbit(p.cx, p.cy, rxMid, ryMid);
-  drawOrbit(p.cx, p.cy, rxOuter, ryOuter);
+  drawOrbit(p.cx, p.cy, rxInner, ryInner, orbitBoost);
+  drawOrbit(p.cx, p.cy, rxMid, ryMid, orbitBoost);
+  drawOrbit(p.cx, p.cy, rxOuter, ryOuter, orbitBoost);
 
-  // ticks
   drawSectorTicks(p.cx, p.cy, rxOuter, ryOuter, SECTORS);
 
-  // active arc follows within-day sector smoothly
   const currentAngle = ((sector + sectorWithin) / SECTORS) * Math.PI * 2;
   const halfWindow = (ACTIVE_ARC_HALF_WINDOW_SECTORS / SECTORS) * Math.PI * 2;
 
@@ -622,39 +760,23 @@ function tick(ms) {
   ctx.shadowColor = "rgba(255,170,200,0.65)";
   ctx.shadowBlur = 16;
   ctx.lineWidth = 4.5;
-  ctx.strokeStyle = "rgba(255,170,200,0.22)";
-  drawEllipseArc(
-    p.cx,
-    p.cy,
-    rxOuter * 1.02,
-    ryOuter * 1.02,
-    currentAngle - halfWindow,
-    currentAngle + halfWindow,
-    ACTIVE_ARC_STEPS
-  );
+  ctx.strokeStyle = `rgba(255,170,200,${0.22 + orbitBoost * 0.08})`;
+  drawEllipseArc(p.cx, p.cy, rxOuter * 1.02, ryOuter * 1.02, currentAngle - halfWindow, currentAngle + halfWindow, ACTIVE_ARC_STEPS);
   ctx.stroke();
   ctx.shadowBlur = 0;
 
   ctx.lineWidth = 2.0;
-  ctx.strokeStyle = "rgba(255,230,240,0.28)";
-  drawEllipseArc(
-    p.cx,
-    p.cy,
-    rxOuter * 1.02,
-    ryOuter * 1.02,
-    currentAngle - halfWindow,
-    currentAngle + halfWindow,
-    ACTIVE_ARC_STEPS
-  );
+  ctx.strokeStyle = `rgba(255,230,240,${0.28 + orbitBoost * 0.08})`;
+  drawEllipseArc(p.cx, p.cy, rxOuter * 1.02, ryOuter * 1.02, currentAngle - halfWindow, currentAngle + halfWindow, ACTIVE_ARC_STEPS);
   ctx.stroke();
   ctx.restore();
 
-  // comet velocity
+  if (warpPulseLeft > 0) drawWarpPulse(p.cx, p.cy, warpPulseT);
+
   const p2 = orbitPoint((dayProgress + 0.002) % 1);
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // checkpoint/claim triggers
   let claimReadyName = null;
 
   for (let i = 0; i < markers.length; i++) {
@@ -687,11 +809,8 @@ function tick(ms) {
     wasNearMarker[i] = near;
   }
 
-  if (claimReadyName) {
-    subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
-  }
+  if (claimReadyName) subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
 
-  // marker triangle (ritual geometry)
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
@@ -707,16 +826,13 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // draw gate dots + labels that reveal when close
   for (const m of markers) {
     const mp = orbitPoint(m.t);
 
     const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
     const revealStart = Math.min(w, h) * 0.22;
     const revealEnd = Math.min(w, h) * 0.07;
-    const aLabel = clamp01(
-      (revealStart - dist) / Math.max(1e-6, revealStart - revealEnd)
-    );
+    const aLabel = clamp01((revealStart - dist) / Math.max(1e-6, revealStart - revealEnd));
 
     ctx.beginPath();
     ctx.fillStyle = "rgba(255,210,120,0.92)";
@@ -744,30 +860,40 @@ function tick(ms) {
     }
   }
 
-  drawComet(p.x, p.y, vx, vy);
+  drawComet(p.x, p.y, vx, vy, warpBoost);
 
   ctx.restore();
 
-  // checkpoint HUD timers + styling
+  if (majorOverlayLeft > 0) {
+    drawMajorOverlay(majorOverlayLabel.replace("PLANET PASS ✦ ", ""), majorOverlayLeft);
+  }
+
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
   checkpointHold = Math.max(0, checkpointHold - dt);
 
-  if (checkpointHold > 0) {
-    checkpointFlash = 1.0;
-  } else {
-    checkpointFlash = Math.max(0, checkpointFlash - dt / CHECKPOINT_FADE_OUT_SEC);
-  }
+  if (checkpointHold > 0) checkpointFlash = 1.0;
+  else checkpointFlash = Math.max(0, checkpointFlash - dt / CHECKPOINT_FADE_OUT_SEC);
 
-  if (subEl.textContent.startsWith("CLAIM READY")) {
+  if (majorOverlayLeft > 0) {
+    subEl.textContent = majorOverlayLabel;
+    const pulse = 0.66 + 0.34 * Math.sin(animT * 0.95);
+    const a = pulse * 0.98;
+    subEl.style.color = `rgba(255, 230, 250, ${a})`;
+    subEl.style.textShadow = `0 0 18px rgba(255, 170, 220, ${a})`;
+  } else if (warpPulseLeft > 0) {
+    subEl.textContent = warpPulseLabel;
+    const pulse = 0.62 + 0.38 * Math.sin(animT * 1.05);
+    const a = pulse * 0.95;
+    subEl.style.color = `rgba(210, 200, 255, ${a})`;
+    subEl.style.textShadow = `0 0 18px rgba(190, 160, 255, ${a})`;
+  } else if (subEl.textContent.startsWith("CLAIM READY")) {
     const pulse = 0.68 + 0.32 * Math.sin(animT * 1.1);
     const a = pulse * 0.95;
-
     subEl.style.color = `rgba(160, 255, 190, ${a})`;
     subEl.style.textShadow = `0 0 18px rgba(120, 255, 170, ${a})`;
   } else if (checkpointFlash > 0 && subEl.textContent.startsWith("CHECKPOINT")) {
     const pulse = 0.62 + 0.38 * Math.sin(animT * CHECKPOINT_PULSE_RATE);
     const a = pulse * checkpointFlash;
-
     subEl.style.color = `rgba(255, 140, 140, ${a})`;
     subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
   } else {
@@ -775,7 +901,9 @@ function tick(ms) {
     subEl.style.textShadow = "";
     if (
       subEl.textContent.startsWith("CHECKPOINT") ||
-      subEl.textContent.startsWith("CLAIM READY")
+      subEl.textContent.startsWith("CLAIM READY") ||
+      subEl.textContent.startsWith("WARP EVENT") ||
+      subEl.textContent.startsWith("PLANET PASS")
     ) {
       subEl.textContent = "Stage 0 • Visual simulation";
     }
