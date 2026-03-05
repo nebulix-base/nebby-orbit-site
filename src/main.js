@@ -17,6 +17,21 @@ app.innerHTML = `
       <div id="sector" class="hud-value">—</div>
     </div>
 
+    <div class="hud-row">
+      <div class="hud-label">Warp</div>
+      <div id="warp" class="hud-value">—</div>
+    </div>
+
+    <div class="hud-row">
+      <div class="hud-label">Next</div>
+      <div id="nextEvent" class="hud-value">—</div>
+    </div>
+
+    <div class="hud-row">
+      <div class="hud-label">T-minus</div>
+      <div id="countdown" class="hud-value">—</div>
+    </div>
+
     <div class="bar">
       <div id="barFill" class="bar-fill"></div>
     </div>
@@ -30,19 +45,24 @@ const ctx = canvas.getContext("2d");
 
 const epochEl = document.getElementById("epoch");
 const sectorEl = document.getElementById("sector");
+const warpEl = document.getElementById("warp");
+const nextEventEl = document.getElementById("nextEvent");
+const countdownEl = document.getElementById("countdown");
 const barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 
-// ======= PARAMETERS YOU CAN TUNE =======
-const EPOCH_SECONDS = 24 * 60 * 60; // keep NORMAL (real-time)
-const SECTORS = 90;
+// ======= CORE TIME PARAMETERS (KEEP REAL) =======
+const EPOCH_SECONDS = 24 * 60 * 60; // real-time day epoch
+const SECTORS = 90;                // micro cadence within each epoch/day
+const ORBIT_EPOCHS = 90;           // macro cadence: 90 epochs = one “orbit”
+// ==============================================
 
 // Orbit spin: you said it's fine (leave as-is)
 const ORBIT_SPIN_BASE = 0.07;
 const ORBIT_SPIN_WOBBLE = 0.015;
 const ORBIT_SPIN_WOBBLE_RATE = 0.2;
 
-// Starfield: make it feel LESS attached to the orbit + MUCH slower
+// Starfield center decoupled from orbit
 const STAR_CENTER_X = 0.44;
 const STAR_CENTER_Y = 0.62;
 const STAR_CENTER_WOBBLE_PX = 48;
@@ -64,25 +84,35 @@ const CHECKPOINT_COOLDOWN_SEC = 0.5;
 const CHECKPOINT_FADE_OUT_SEC = 1.4;
 const CHECKPOINT_PULSE_RATE = 1.4;
 
-// ===== NEW: VISUAL SECTOR + CLAIM TUNES =====
-const TICK_RING_SCALE = 1.35;            // put ticks on the outer ring
+// ===== VISUAL SECTOR + CLAIM TUNES =====
+const TICK_MAJOR_EVERY = 10;
 const TICK_MINOR_LEN = 7;
 const TICK_MAJOR_LEN = 14;
-const TICK_MAJOR_EVERY = 10;             // major tick every N sectors
-const ACTIVE_ARC_HALF_WINDOW_SECTORS = 1.5; // arc covers +/- this many sectors around "current"
-const ACTIVE_ARC_STEPS = 42;             // smoothness of arc on ellipse
 
-// Marker / gate sectors (fixed sector numbers)
+const ACTIVE_ARC_HALF_WINDOW_SECTORS = 1.5;
+const ACTIVE_ARC_STEPS = 42;
+
+// Gate sectors (fixed sector numbers, 0..SECTORS-1)
 const GATES = [
   { sector: 0, name: "☉ Sun Gate" },
   { sector: 30, name: "☾ Moon Gate" },
   { sector: 60, name: "♂ Mars Gate" },
 ];
 
-// Optional “claim ready” rule (purely visual now):
-// claimReady when you're near a gate AND sector is within +/- CLAIM_SECTOR_WINDOW
+// Claim window (visual only for now)
 const CLAIM_SECTOR_WINDOW = 1;
-// =======================================
+
+// ===== CADENCE: MAJOR EVENTS ON EPOCH-IN-ORBIT =====
+const MAJOR_EPOCHS = [15, 30, 45, 60, 75, 90];
+const MAJOR_LABELS = {
+  15: "🌙 Moon Pass",
+  30: "🔴 Mars Pass",
+  45: "🟣 Deep Space",
+  60: "🟡 Jupiter Pass",
+  75: "☀ Solar Flare",
+  90: "⟲ Perihelion Reset",
+};
+// ===============================================
 
 let w = 0,
   h = 0,
@@ -90,9 +120,138 @@ let w = 0,
 let prevW = 0;
 let prevH = 0;
 
-// ---------------- STARFIELD ----------------
+// ---------------- UTIL ----------------
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function formatCountdown(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
 
-// Far layer (slow drift)
+  if (d > 0) return `${d}d ${pad2(h)}h ${pad2(m)}m`;
+  if (h > 0) return `${h}h ${pad2(m)}m ${pad2(ss)}s`;
+  return `${m}m ${pad2(ss)}s`;
+}
+function roman(n) {
+  // 1..18 expected
+  const map = [
+    ["X", 10],
+    ["IX", 9],
+    ["V", 5],
+    ["IV", 4],
+    ["I", 1],
+  ];
+  let x = Math.max(0, Math.floor(n));
+  let out = "";
+  for (const [sym, val] of map) {
+    while (x >= val) {
+      out += sym;
+      x -= val;
+    }
+  }
+  return out || "—";
+}
+
+// Epoch/Orbit helpers
+function getEpochIndex(realNowSec) {
+  return Math.floor(realNowSec / EPOCH_SECONDS);
+}
+function getDayProgress(realNowSec) {
+  return (realNowSec % EPOCH_SECONDS) / EPOCH_SECONDS; // 0..1
+}
+function getEpochInOrbit(epochIndex) {
+  return (epochIndex % ORBIT_EPOCHS) + 1; // 1..90
+}
+function getWarpLevel(epochInOrbit) {
+  return Math.floor((epochInOrbit - 1) / 5) + 1; // 1..18
+}
+function getNextMajor(epochInOrbit) {
+  for (const e of MAJOR_EPOCHS) {
+    if (epochInOrbit <= e) return e;
+  }
+  return 90;
+}
+function secondsUntilEpochInOrbit(epochInOrbit, targetEpochInOrbit, dayProgress) {
+  // If target is current epoch, countdown to its end-of-epoch moment (or 0 at start)
+  // Here we define the event as "arrives when epoch flips into target epoch".
+  // So if we’re already in target epoch, next occurrence is next orbit cycle.
+  let deltaEpochs = targetEpochInOrbit - epochInOrbit;
+  if (deltaEpochs <= 0) deltaEpochs += ORBIT_EPOCHS;
+
+  // time remaining in current epoch/day + whole epochs after
+  const remainingThisEpoch = (1 - dayProgress) * EPOCH_SECONDS;
+  const fullEpochsAfter = Math.max(0, deltaEpochs - 1) * EPOCH_SECONDS;
+
+  return remainingThisEpoch + fullEpochsAfter;
+}
+
+// Sector ring math
+function wrapSectorDelta(a, b) {
+  const d = a - b;
+  const m = ((d % SECTORS) + SECTORS) % SECTORS;
+  return m > SECTORS / 2 ? m - SECTORS : m;
+}
+function ellipsePoint(cx, cy, rx, ry, angleRad) {
+  return { x: cx + Math.cos(angleRad) * rx, y: cy + Math.sin(angleRad) * ry };
+}
+function ellipseOutNormal(rx, ry, angleRad) {
+  const nx = Math.cos(angleRad) / Math.max(1e-6, rx);
+  const ny = Math.sin(angleRad) / Math.max(1e-6, ry);
+  const mag = Math.max(1e-6, Math.hypot(nx, ny));
+  return { nx: nx / mag, ny: ny / mag };
+}
+function drawEllipseArc(cx, cy, rx, ry, a0, a1, steps) {
+  const dir = a1 >= a0 ? 1 : -1;
+  const span = Math.abs(a1 - a0);
+  const n = Math.max(8, steps);
+
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const ang = a0 + dir * span * t;
+    const p = ellipsePoint(cx, cy, rx, ry, ang);
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+}
+function drawSectorTicks(cx, cy, rx, ry, sectors) {
+  ctx.save();
+  ctx.lineCap = "round";
+
+  for (let i = 0; i < sectors; i++) {
+    const ang = (i / sectors) * Math.PI * 2;
+    const p = ellipsePoint(cx, cy, rx, ry, ang);
+    const n = ellipseOutNormal(rx, ry, ang);
+
+    const isMajor = i % TICK_MAJOR_EVERY === 0;
+    const len = isMajor ? TICK_MAJOR_LEN : TICK_MINOR_LEN;
+
+    const x1 = p.x + n.nx * 2;
+    const y1 = p.y + n.ny * 2;
+    const x2 = p.x + n.nx * (2 + len);
+    const y2 = p.y + n.ny * (2 + len);
+
+    ctx.strokeStyle = isMajor
+      ? "rgba(255,220,200,0.35)"
+      : "rgba(220,200,255,0.16)";
+    ctx.lineWidth = isMajor ? 2.0 : 1.0;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ---------------- STARFIELD ----------------
 const farStars = Array.from({ length: 220 }, () => ({
   x: Math.random() * window.innerWidth,
   y: Math.random() * window.innerHeight,
@@ -100,7 +259,6 @@ const farStars = Array.from({ length: 220 }, () => ({
   a: 0.12 + Math.random() * 0.28,
 }));
 
-// Near layer (faster drift)
 const nearStars = Array.from({ length: 120 }, () => ({
   x: Math.random() * window.innerWidth,
   y: Math.random() * window.innerHeight,
@@ -108,7 +266,6 @@ const nearStars = Array.from({ length: 120 }, () => ({
   a: 0.25 + Math.random() * 0.55,
 }));
 
-// Mid spiral layer (with trails)
 const stars = Array.from({ length: 520 }, () => {
   const z = Math.random();
   const x = Math.random() * window.innerWidth;
@@ -158,12 +315,10 @@ function resize() {
     s.px *= sx;
     s.py *= sy;
   }
-
   for (const s of farStars) {
     s.x *= sx;
     s.y *= sy;
   }
-
   for (const s of nearStars) {
     s.x *= sx;
     s.y *= sy;
@@ -372,84 +527,7 @@ function drawComet(x, y, vx, vy) {
   ctx.restore();
 }
 
-// ---------------- NEW: SECTOR VISUALS ----------------
-function clamp01(v) {
-  return Math.max(0, Math.min(1, v));
-}
-
-function wrapSectorDelta(a, b) {
-  // smallest delta between sectors a and b on a ring
-  const d = a - b;
-  const m = ((d % SECTORS) + SECTORS) % SECTORS;
-  return m > SECTORS / 2 ? m - SECTORS : m;
-}
-
-function ellipsePoint(cx, cy, rx, ry, angleRad) {
-  return {
-    x: cx + Math.cos(angleRad) * rx,
-    y: cy + Math.sin(angleRad) * ry,
-  };
-}
-
-function ellipseOutNormal(rx, ry, angleRad) {
-  // outward normal for ellipse x=rx cos(a), y=ry sin(a) is proportional to (cos(a)/rx, sin(a)/ry)
-  const nx = Math.cos(angleRad) / Math.max(1e-6, rx);
-  const ny = Math.sin(angleRad) / Math.max(1e-6, ry);
-  const mag = Math.max(1e-6, Math.hypot(nx, ny));
-  return { nx: nx / mag, ny: ny / mag };
-}
-
-function drawSectorTicks(cx, cy, rx, ry, sectors) {
-  ctx.save();
-
-  ctx.lineCap = "round";
-
-  for (let i = 0; i < sectors; i++) {
-    const ang = (i / sectors) * Math.PI * 2;
-
-    const p = ellipsePoint(cx, cy, rx, ry, ang);
-    const n = ellipseOutNormal(rx, ry, ang);
-
-    const isMajor = i % TICK_MAJOR_EVERY === 0;
-    const len = isMajor ? TICK_MAJOR_LEN : TICK_MINOR_LEN;
-
-    const x1 = p.x + n.nx * 2;
-    const y1 = p.y + n.ny * 2;
-    const x2 = p.x + n.nx * (2 + len);
-    const y2 = p.y + n.ny * (2 + len);
-
-    ctx.strokeStyle = isMajor
-      ? "rgba(255,220,200,0.35)"
-      : "rgba(220,200,255,0.16)";
-    ctx.lineWidth = isMajor ? 2.0 : 1.0;
-
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function drawEllipseArc(cx, cy, rx, ry, a0, a1, steps) {
-  // Draw arc by sampling points (Canvas ellipse arc is awkward when rotated/approximated)
-  const dir = a1 >= a0 ? 1 : -1;
-  const span = Math.abs(a1 - a0);
-  const n = Math.max(8, steps);
-
-  ctx.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const ang = a0 + dir * span * t;
-    const p = ellipsePoint(cx, cy, rx, ry, ang);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  }
-}
-
-// ---------------- CHECKPOINTS / GATES ----------------
-// Convert fixed sector markers into orbit fractions (t in [0,1))
+// ---------------- GATES (SECTOR-ANCHORED) ----------------
 const markers = GATES.map((g) => ({
   sector: ((g.sector % SECTORS) + SECTORS) % SECTORS,
   t: (((g.sector % SECTORS) + SECTORS) % SECTORS) / SECTORS,
@@ -473,27 +551,44 @@ function tick(ms) {
 
   animT += dt;
 
-  // ✅ KEEP NORMAL REAL TIME
+  // ===== CLOCKS =====
   const realNow = Date.now() / 1000;
-  const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
 
-  // sector index (0..SECTORS-1)
-  const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
-  const sectorWithin = epochProgress * SECTORS - sector; // 0..1 within sector
+  const epochIndex = getEpochIndex(realNow);
+  const dayProgress = getDayProgress(realNow); // 0..1
+  const epochInOrbit = getEpochInOrbit(epochIndex); // 1..90
+  const warpLevel = getWarpLevel(epochInOrbit);     // 1..18
 
-  // HUD
-  epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
+  // Micro sectors inside the current epoch/day (drives orbit motion)
+  const sector = Math.min(SECTORS - 1, Math.floor(dayProgress * SECTORS));
+  const sectorWithin = dayProgress * SECTORS - sector;
+
+  // Next major event info
+  const nextMajorEpoch = getNextMajor(epochInOrbit);
+  const nextMajorLabel = MAJOR_LABELS[nextMajorEpoch] || `Epoch ${nextMajorEpoch}`;
+  const secondsToNextMajor = secondsUntilEpochInOrbit(
+    epochInOrbit,
+    nextMajorEpoch,
+    dayProgress
+  );
+
+  // ===== HUD =====
+  epochEl.textContent = `${epochInOrbit} / ${ORBIT_EPOCHS}`;
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
-  barFill.style.width = `${epochProgress * 100}%`;
+  warpEl.textContent = roman(warpLevel);
+  nextEventEl.textContent = nextMajorLabel;
+  countdownEl.textContent = formatCountdown(secondsToNextMajor);
+
+  // bar shows day progress (epoch progress)
+  barFill.style.width = `${dayProgress * 100}%`;
 
   // draw background + stars
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
-  // orbit point for comet
-  const p = orbitPoint(epochProgress);
+  // orbit position uses micro day progress for smooth motion
+  const p = orbitPoint(dayProgress);
 
-  // orbit rotation (you said it’s fine)
   orbitRotation +=
     dt *
     (ORBIT_SPIN_BASE +
@@ -505,7 +600,6 @@ function tick(ms) {
   ctx.rotate(orbitRotation);
   ctx.translate(-p.cx, -p.cy);
 
-  // Rings
   const rxInner = p.rx * 0.75;
   const ryInner = p.ry * 0.75;
   const rxMid = p.rx;
@@ -517,10 +611,10 @@ function tick(ms) {
   drawOrbit(p.cx, p.cy, rxMid, ryMid);
   drawOrbit(p.cx, p.cy, rxOuter, ryOuter);
 
-  // NEW: sector ticks on outer ring
-  drawSectorTicks(p.cx, p.cy, rxOuter * 1.0, ryOuter * 1.0, SECTORS);
+  // ticks
+  drawSectorTicks(p.cx, p.cy, rxOuter, ryOuter, SECTORS);
 
-  // NEW: active sector “claim window” arc (smoothly tracks within-sector progress)
+  // active arc follows within-day sector smoothly
   const currentAngle = ((sector + sectorWithin) / SECTORS) * Math.PI * 2;
   const halfWindow = (ACTIVE_ARC_HALF_WINDOW_SECTORS / SECTORS) * Math.PI * 2;
 
@@ -556,11 +650,11 @@ function tick(ms) {
   ctx.restore();
 
   // comet velocity
-  const p2 = orbitPoint((epochProgress + 0.002) % 1);
+  const p2 = orbitPoint((dayProgress + 0.002) % 1);
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // ---- checkpoint/claim trigger logic ----
+  // checkpoint/claim triggers
   let claimReadyName = null;
 
   for (let i = 0; i < markers.length; i++) {
@@ -571,12 +665,10 @@ function tick(ms) {
     const triggerDist = Math.min(w, h) * CHECKPOINT_TRIGGER_DIST_FRAC;
     const near = d < triggerDist;
 
-    // Optional: claim-ready if sector matches window around marker sector
     const sd = Math.abs(wrapSectorDelta(sector, m.sector));
     const claimReady = near && sd <= CLAIM_SECTOR_WINDOW;
     if (claimReady) claimReadyName = m.name;
 
-    // edge-trigger entering near zone
     if (near && !wasNearMarker[i] && checkpointCooldown <= 0) {
       checkpointCooldown = CHECKPOINT_COOLDOWN_SEC;
       checkpointHold = 2.6;
@@ -584,7 +676,6 @@ function tick(ms) {
       subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
     }
 
-    // keep message while near
     if (CHECKPOINT_HOLD_WHILE_NEAR && near) {
       checkpointHold = Math.max(checkpointHold, 0.25);
       checkpointFlash = Math.max(checkpointFlash, 0.45);
@@ -596,12 +687,11 @@ function tick(ms) {
     wasNearMarker[i] = near;
   }
 
-  // If claim-ready (purely visual for now), override HUD message
   if (claimReadyName) {
     subEl.textContent = `CLAIM READY ✦ ${claimReadyName}`;
   }
 
-  // ---- marker triangle lines ----
+  // marker triangle (ritual geometry)
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
@@ -617,17 +707,17 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // ---- draw gate marker dots + labels ----
+  // draw gate dots + labels that reveal when close
   for (const m of markers) {
     const mp = orbitPoint(m.t);
 
-    // label fades in as Nebby approaches
     const dist = Math.hypot(p.x - mp.x, p.y - mp.y);
     const revealStart = Math.min(w, h) * 0.22;
     const revealEnd = Math.min(w, h) * 0.07;
-    const aLabel = clamp01((revealStart - dist) / Math.max(1e-6, (revealStart - revealEnd)));
+    const aLabel = clamp01(
+      (revealStart - dist) / Math.max(1e-6, revealStart - revealEnd)
+    );
 
-    // dot
     ctx.beginPath();
     ctx.fillStyle = "rgba(255,210,120,0.92)";
     ctx.shadowColor = "rgba(255,210,120,0.9)";
@@ -636,7 +726,6 @@ function tick(ms) {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // label
     if (aLabel > 0.02) {
       ctx.save();
       ctx.globalAlpha = 0.25 + 0.75 * aLabel;
@@ -645,7 +734,6 @@ function tick(ms) {
       ctx.shadowColor = "rgba(255,190,230,0.65)";
       ctx.shadowBlur = 10;
 
-      // small outward offset from marker
       const ang = m.t * Math.PI * 2;
       const n = ellipseOutNormal(p.rx, p.ry, ang);
       const ox = n.nx * 18;
@@ -656,12 +744,11 @@ function tick(ms) {
     }
   }
 
-  // comet
   drawComet(p.x, p.y, vx, vy);
 
   ctx.restore();
 
-  // ---- checkpoint HUD timers + slower flicker ----
+  // checkpoint HUD timers + styling
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
   checkpointHold = Math.max(0, checkpointHold - dt);
 
@@ -671,7 +758,6 @@ function tick(ms) {
     checkpointFlash = Math.max(0, checkpointFlash - dt / CHECKPOINT_FADE_OUT_SEC);
   }
 
-  // HUD styling: claim vs checkpoint vs idle
   if (subEl.textContent.startsWith("CLAIM READY")) {
     const pulse = 0.68 + 0.32 * Math.sin(animT * 1.1);
     const a = pulse * 0.95;
