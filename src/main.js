@@ -285,7 +285,7 @@ function tick(ms) {
   lastMs = ms;
 
   animT += dt;
-  orbitRotation += dt * 0.08; // smooth visible spin
+  orbitRotation += dt * (0.07 + Math.sin(animT * 0.2) * 0.015);// smooth visible spin little wobble
 
   // HUD time
   const realNow = Date.now() / 1000;
