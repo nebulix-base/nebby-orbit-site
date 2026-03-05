@@ -48,9 +48,14 @@ let prevH = 0;
 // ---------------- STARFIELD ----------------
 const stars = Array.from({ length: 420 }, () => {
   const z = Math.random();
+  const x = Math.random() * window.innerWidth;
+  const y = Math.random() * window.innerHeight;
+
   return {
-    x: Math.random() * window.innerWidth,
-    y: Math.random() * window.innerHeight,
+    x,
+    y,
+    px: x, // previous x (for trails)
+    py: y, // previous y (for trails)
     r: 0.4 + z * 1.6,
     a: 0.2 + z * 0.8,
     z,
@@ -62,11 +67,14 @@ const stars = Array.from({ length: 420 }, () => {
 });
 
 function respawnStar(s, cx, cy) {
-  // spawn near center so we don't get empty patches
   const ang = Math.random() * Math.PI * 2;
   const rad = 6 + Math.random() * 30;
+
   s.x = cx + Math.cos(ang) * rad;
   s.y = cy + Math.sin(ang) * rad;
+  s.px = s.x;
+  s.py = s.y;
+
   s.life = 0;
   s.phase = Math.random() * Math.PI * 2;
 }
@@ -84,6 +92,8 @@ function resize() {
   for (const s of stars) {
     s.x *= sx;
     s.y *= sy;
+    s.px *= sx;
+    s.py *= sy;
   }
 
   canvas.width = Math.floor(w * dpr);
@@ -117,7 +127,7 @@ function drawBackground(t, dt) {
 
   // FEEL CONTROLS
   const swirl = 0.00011; // lower = slower spiral
-  const drift = 0.018; // higher = more "forward travel"
+  const drift = 0.018;   // higher = more "forward travel"
 
   // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
@@ -125,6 +135,10 @@ function drawBackground(t, dt) {
   for (const s of stars) {
     // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
+
+    // save previous pos for trail segment
+    s.px = s.x;
+    s.py = s.y;
 
     const dx = s.x - cx;
     const dy = s.y - cy;
@@ -149,16 +163,30 @@ function drawBackground(t, dt) {
     // recycle stars (prevents empty gaps after long time)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
+      continue;
     }
     if (Math.hypot(s.x - cx, s.y - cy) > Math.max(w, h) * 0.9) {
       respawnStar(s, cx, cy);
+      continue;
     }
 
-    // twinkle
+    // twinkle + alpha
     const tw = 0.85 + 0.15 * Math.sin(t * 1.4 + s.phase);
     const alpha = s.a * tw * (0.25 + 0.75 * s.life);
 
-    // draw star dot (no straw streaks)
+    // -------- STAR TRAIL (this is the missing effect) --------
+    // draw a short line from previous position to current position
+    // (stronger for nearer stars)
+    const trailStrength = 0.10 + 0.30 * s.z; // near stars = stronger trail
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(220,210,255,${alpha * trailStrength})`;
+    ctx.lineWidth = 0.35 + s.z * 0.9;
+    ctx.lineCap = "round";
+    ctx.moveTo(s.px, s.py);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+
+    // -------- STAR DOT --------
     ctx.shadowBlur = s.z > 0.78 ? 8 : 0;
     ctx.shadowColor = "rgba(220,210,255,0.6)";
     ctx.beginPath();
@@ -268,7 +296,7 @@ function tick(ms) {
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
   barFill.style.width = `${epochProgress * 100}%`;
 
-  // draw background + stars (stars MOVEMENT depends on dt)
+  // draw background + stars (stars movement depends on dt)
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
@@ -307,6 +335,22 @@ function tick(ms) {
     }
 
     wasNearMarker[i] = near;
+  }
+
+  // ---- marker triangle lines (THIS was missing) ----
+  if (markers.length >= 3) {
+    const pts = markers.map((m) => orbitPoint(m.t));
+    ctx.shadowColor = "rgba(255,200,150,0.6)";
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = "rgba(255,210,150,0.25)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
   // ---- draw checkpoint marker dots (visual) ----
