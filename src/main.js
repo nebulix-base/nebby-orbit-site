@@ -45,18 +45,19 @@ let prevH = 0;
 
 
 // --- Starfield ---
-const stars = Array.from({ length: 320 }, () => {
-  const z = Math.random(); // 0..1 depth (0 = far, 1 = near)
-  const speed = 0.15 + z * 0.55; // near stars move faster
+const z = Math.random(); // depth
+const speed = 0.2 + z * 0.8;
 
-  return {
+return {
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
-    r: 0.4 + z * 1.8,
-    a: 0.15 + z * 0.85,
+    r: 0.3 + z * 1.9,
+    a: 0.2 + z * 0.8,
     z,
     speed,
-    phase: Math.random() * Math.PI * 2, // twinkle phase
+    phase: Math.random() * Math.PI * 2,
+    life: Math.random(),      // visibility ramp
+    grow: 0.02 + Math.random() * 0.02
   };
 });
 
@@ -108,39 +109,62 @@ for (const s of stars) {
   let dx = s.x - cx;
   let dy = s.y - cy;
 
-  // tangential direction (perpendicular) for swirl
-  const inv = 1 / Math.max(40, Math.hypot(dx, dy));
-  const tx = -dy * inv;
-  const ty =  dx * inv;
 
-  // radial direction for “through space” travel
+  // fade in instead of popping
+  s.life = Math.min(1, s.life + s.grow * 0.02);
+
+  let dx = s.x - cx;
+  let dy = s.y - cy;
+
+  const dist = Math.max(40, Math.hypot(dx, dy));
+  const inv = 1 / dist;
+
+  const tx = -dy * inv;
+  const ty = dx * inv;
+
   const rx = dx * inv;
   const ry = dy * inv;
 
-  // near stars move more (depth)
   const k = s.speed;
 
-  // swirl + drift
-  s.x += (tx * swirl * k * 1000) + (rx * drift * k * 0.6);
-  s.y += (ty * swirl * k * 1000) + (ry * drift * k * 0.6);
+  s.x += (tx * swirl * k * 1200) + (rx * drift * k);
+  s.y += (ty * swirl * k * 1200) + (ry * drift * k);
 
-  // slight overall downward bias to avoid symmetry (optional)
-  s.y += 0.03 * k;
-
-  // wrap around with a “respawn” at edges, biased to outside ring
-  if (s.x < -60 || s.x > w + 60 || s.y < -60 || s.y > h + 60) {
+  // respawn far outside screen
+  if (s.x < -80 || s.x > w + 80 || s.y < -80 || s.y > h + 80) {
     const ang = Math.random() * Math.PI * 2;
-    const rad = Math.max(w, h) * (0.55 + Math.random() * 0.25);
+    const rad = Math.max(w, h) * (0.6 + Math.random() * 0.25);
+
     s.x = cx + Math.cos(ang) * rad;
     s.y = cy + Math.sin(ang) * rad;
+
+    s.life = 0; // fade in again
   }
 
-  // twinkle
-  const tw = 0.75 + 0.25 * Math.sin(animT * 1.2 + s.phase);
-  ctx.beginPath();
-  ctx.fillStyle = `rgba(220, 210, 255, ${s.a * tw})`;
-  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-  ctx.fill();
+  const tw = 0.75 + 0.25 * Math.sin(animT * 1.4 + s.phase);
+  const alpha = s.a * tw * s.life;
+
+  // ⭐ Near stars become streaks
+  if (s.z > 0.72) {
+
+    const len = 6 + s.z * 18;
+
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(220,210,255,${alpha})`;
+    ctx.lineWidth = 0.6 + s.z * 1.4;
+
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x - rx * len, s.y - ry * len);
+    ctx.stroke();
+
+  } else {
+
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(220,210,255,${alpha})`;
+    ctx.arc(s.x, s.y, s.r * s.life, 0, Math.PI * 2);
+    ctx.fill();
+
+  }
 }
 
   // soft nebula haze
