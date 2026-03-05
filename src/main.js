@@ -46,21 +46,21 @@ let prevH = 0;
 
 // --- Starfield ---
 const z = Math.random(); // depth
-// --- Starfield (spiral + warp streaks + fade-in) ---
+// --- Starfield (spiral + subtle warp + fade-in) ---
 const stars = Array.from({ length: 340 }, () => {
   const z = Math.random();              // 0..1 depth (0 far, 1 near)
-  const speed = 0.2 + z * 0.8;          // near stars move faster
+  const speed = 0.25 + z * 1.25;        // near stars move faster
 
   return {
     x: Math.random() * window.innerWidth,
     y: Math.random() * window.innerHeight,
-    r: 0.3 + z * 1.9,
-    a: 0.2 + z * 0.8,
+    r: 0.35 + z * 1.6,
+    a: 0.15 + z * 0.85,
     z,
     speed,
     phase: Math.random() * Math.PI * 2,
-    life: Math.random(),                 // starts partially visible
-    grow: 0.02 + Math.random() * 0.02     // fade-in rate
+    life: Math.random(),                // fade-in progress
+    grow: 0.008 + Math.random() * 0.014  // fade-in rate (slow enough not to pop)
   };
 });
 
@@ -92,90 +92,90 @@ window.addEventListener("resize", resize);
 resize();
 
 function drawBackground() {
-  const g = ctx.createRadialGradient(w * 0.55, h * 0.45, 0, w * 0.55, h * 0.45, Math.max(w, h));
+  const g = ctx.createRadialGradient(
+    w * 0.55, h * 0.45, 0,
+    w * 0.55, h * 0.45, Math.max(w, h)
+  );
   g.addColorStop(0, "rgba(32, 12, 55, 1)");
   g.addColorStop(0.45, "rgba(10, 8, 24, 1)");
   g.addColorStop(1, "rgba(0, 0, 0, 1)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
- // --- Spiral starfield ---
-  const cx = w * 0.55;
-  const cy = h * 0.50;
+  // --- Spiral / forward motion feel ---
+  const cx = w * 0.52;
+  const cy = h * 0.52;
 
-  // feel controls (tune these)
-  const swirl = 0.0016;  // rotation strength
-  const drift = 0.22;    // "flying forward" strength
+  const swirl = 0.0011;   // rotation strength
+  const drift = 0.12;     // forward travel strength
 
   for (const s of stars) {
     // fade in instead of popping
     s.life = Math.min(1, s.life + s.grow);
 
-    // vector from center
     const dx = s.x - cx;
     const dy = s.y - cy;
 
-    const dist = Math.max(40, Math.hypot(dx, dy));
+    const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-    // tangential (swirl) and radial (forward travel)
+    // tangential + radial directions
     const tx = -dy * inv;
     const ty =  dx * inv;
-
-    const rx = dx * inv;
-    const ry = dy * inv;
+    const rx =  dx * inv;
+    const ry =  dy * inv;
 
     const k = s.speed;
 
-    // move star
-    s.x += (tx * swirl * k * 1200) + (rx * drift * k);
-    s.y += (ty * swirl * k * 1200) + (ry * drift * k);
+    // motion
+    s.x += (tx * swirl * k * 900) + (rx * drift * k);
+    s.y += (ty * swirl * k * 900) + (ry * drift * k);
 
-    // respawn outside screen with fade-in
-    if (s.x < -80 || s.x > w + 80 || s.y < -80 || s.y > h + 80) {
+    // respawn offscreen and fade in again
+    if (s.x < -120 || s.x > w + 120 || s.y < -120 || s.y > h + 120) {
       const ang = Math.random() * Math.PI * 2;
-      const rad = Math.max(w, h) * (0.6 + Math.random() * 0.25);
+      const rad = Math.max(w, h) * (0.65 + Math.random() * 0.35);
       s.x = cx + Math.cos(ang) * rad;
       s.y = cy + Math.sin(ang) * rad;
-      s.life = 0; // start invisible then fade in
+      s.life = 0;
     }
 
-    const tw = 0.75 + 0.25 * Math.sin(animT * 1.4 + s.phase);
-    const alpha = (0.25 + 0.75 * s.a) * tw * (0.35 + 0.65 * s.life);
+    const tw = 0.8 + 0.2 * Math.sin(animT * 1.2 + s.phase);
+    const alpha = s.a * tw * (0.15 + 0.85 * s.life);
 
-    // near stars become streaks (warp)
-    if (s.z > 0.90) {
-     // near stars become subtle streaks (warp)
-    const len = 4 + s.z * 10;          // short streaks (not straws)
-  
-  ctx.beginPath();
-  ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.85})`;
-  ctx.lineWidth = 0.6;               // keep thin
-  ctx.lineCap = "round";
-  
-  ctx.moveTo(s.x, s.y);
-  ctx.lineTo(s.x - rx * len, s.y - ry * len);
-  ctx.stroke();
+    // Near stars: subtle short streaks (not straws)
+    if (s.z > 0.93) {
+      const len = 2 + s.z * 6; // short streaks
 
-  ctx.shadowBlur = 0;  // <-- reset after streak    
-  } else {
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(220,210,255,${alpha * 0.75})`;
+      ctx.lineWidth = 0.5 + s.z * 0.6;
+      ctx.lineCap = "round";
 
-  // glow only on nearer dot stars
-  if (s.z > 0.75) {
-    ctx.shadowColor = "rgba(220,210,255,0.6)";
-    ctx.shadowBlur = 10;
-  } else {
-    ctx.shadowBlur = 0;
-  }
-  ctx.beginPath();
-  ctx.fillStyle = `rgba(220,210,255,${alpha})`;
-  ctx.arc(s.x, s.y, s.r * (0.5 + 0.5 * s.life), 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.shadowBlur = 0;  // <-- reset after dot
-  }
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - rx * len, s.y - ry * len);
+      ctx.stroke();
 
-  // soft nebula haze
+      ctx.shadowBlur = 0;
+    } else {
+      // Optional glow on mid-near stars
+      if (s.z > 0.78) {
+        ctx.shadowColor = "rgba(220,210,255,0.5)";
+        ctx.shadowBlur = 8;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(220,210,255,${alpha})`;
+      ctx.arc(s.x, s.y, s.r * (0.35 + 0.65 * s.life), 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+    }
+  } // <-- IMPORTANT: closes the for-loop
+
+  // soft nebula haze (IMPORTANT: outside the loop)
   ctx.globalAlpha = 0.12;
   ctx.fillStyle = "rgba(145, 70, 255, 1)";
   ctx.beginPath();
