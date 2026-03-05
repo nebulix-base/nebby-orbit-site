@@ -33,11 +33,28 @@ const sectorEl = document.getElementById("sector");
 const barFill = document.getElementById("barFill");
 const subEl = document.getElementById("sub");
 
-// ======= PARAMETERS =======
-const EPOCH_SECONDS = 24 * 60 * 60;
+// ======= PARAMETERS YOU CAN TUNE =======
+const EPOCH_SECONDS = 24 * 60 * 60; // "a day" in your HUD logic
 const SECTORS = 90;
-const SPEED_MULT = 1;
-// ==========================
+
+// ✅ Make checkpoints happen often (this is the big fix)
+// 1 = real-time. Try 60, 120, 300 for faster.
+const TIME_SCALE = 120;
+
+// ✅ Orbit spin speed (smaller = slower)
+const ORBIT_SPIN = 0.035; // try 0.02 .. 0.06
+
+// ✅ Starfield spiral is now DECOUPLED from orbit rotation
+// (different center + its own gentle drift so it doesn't feel "attached")
+const STAR_CENTER_X = 0.50; // 0..1
+const STAR_CENTER_Y = 0.54; // 0..1
+const STAR_CENTER_WOBBLE = 0.018; // 0..0.05
+
+// Star motion feel
+const STAR_SWIRL = 0.00012; // lower = slower spiral
+const STAR_DRIFT = 0.018;   // higher = more "forward travel"
+
+// =======================================
 
 let w = 0,
   h = 0,
@@ -56,8 +73,8 @@ const stars = Array.from({ length: 520 }, () => {
   return {
     x,
     y,
-    px: x, // previous x (for trails)
-    py: y, // previous y (for trails)
+    px: x,
+    py: y,
     r: 0.4 + z * 1.6,
     a: 0.2 + z * 0.8,
     z,
@@ -86,7 +103,6 @@ const nearStars = Array.from({ length: 120 }, () => ({
 
 function respawnStar(s, cx, cy) {
   const ang = Math.random() * Math.PI * 2;
-  // bias spawn toward center to maintain density
   const rad = Math.pow(Math.random(), 0.6) * 40;
 
   s.x = cx + Math.cos(ang) * rad;
@@ -108,7 +124,6 @@ function resize() {
   const sx = prevW ? w / prevW : 1;
   const sy = prevH ? h / prevH : 1;
 
-  // scale mid stars
   for (const s of stars) {
     s.x *= sx;
     s.y *= sy;
@@ -116,7 +131,6 @@ function resize() {
     s.py *= sy;
   }
 
-  // scale far/near stars
   for (const s of farStars) {
     s.x *= sx;
     s.y *= sy;
@@ -152,17 +166,18 @@ function drawBackground(t, dt) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  const cx = w * 0.52;
-  const cy = h * 0.52;
-
-  // FEEL CONTROLS
-  const swirl = 0.00013; // lower = slower spiral
-  const drift = 0.018; // higher = more "forward travel"
-
   // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
 
-  // FAR STAR LAYER (very slow drift)
+  // ✅ Starfield center is NOT exactly the orbit center anymore
+  const cxBase = w * STAR_CENTER_X;
+  const cyBase = h * STAR_CENTER_Y;
+
+  // gentle wobble so it feels like you're drifting through space, not "stuck to orbit"
+  const cx = cxBase + Math.sin(t * 0.27) * (Math.min(w, h) * STAR_CENTER_WOBBLE);
+  const cy = cyBase + Math.cos(t * 0.23) * (Math.min(w, h) * STAR_CENTER_WOBBLE);
+
+  // FAR STAR LAYER
   for (const s of farStars) {
     s.x += 0.03 * step;
     if (s.x > w + 2) s.x = -2;
@@ -175,10 +190,8 @@ function drawBackground(t, dt) {
 
   // MID STAR LAYER (spiral + trails)
   for (const s of stars) {
-    // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
 
-    // save previous pos for trail segment
     s.px = s.x;
     s.py = s.y;
 
@@ -188,7 +201,7 @@ function drawBackground(t, dt) {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-    // gravitational lens strength near center
+    // lens near center
     const lensRadius = Math.min(w, h) * 0.22;
     const lensStrength = 0.35;
     let lens = 0;
@@ -197,21 +210,17 @@ function drawBackground(t, dt) {
       lens = (1 - d) * lensStrength;
     }
 
-    // tangential direction (spin)
     const tx = -dy * inv;
     const ty = dx * inv;
 
-    // radial direction (outward/forward feel)
     const rx = dx * inv;
     const ry = dy * inv;
 
     const k = s.speed;
 
-    // update position
-    s.x += ((tx * swirl * k * 900) + (rx * drift * k) + (rx * lens * 40)) * step;
-    s.y += ((ty * swirl * k * 900) + (ry * drift * k) + (ry * lens * 40)) * step;
+    s.x += ((tx * STAR_SWIRL * k * 900) + (rx * STAR_DRIFT * k) + (rx * lens * 40)) * step;
+    s.y += ((ty * STAR_SWIRL * k * 900) + (ry * STAR_DRIFT * k) + (ry * lens * 40)) * step;
 
-    // recycle stars (prevents empty gaps)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
       continue;
@@ -221,12 +230,11 @@ function drawBackground(t, dt) {
       continue;
     }
 
-    // twinkle + alpha
     const tw = 0.85 + 0.15 * Math.sin(t * 1.4 + s.phase);
     const alpha = s.a * tw * (0.25 + 0.75 * s.life);
 
-    // -------- STAR TRAIL --------
-    const trailStrength = 0.10 + 0.30 * s.z; // near stars = stronger trail
+    // trails
+    const trailStrength = 0.10 + 0.30 * s.z;
     ctx.beginPath();
     ctx.strokeStyle = `rgba(220,210,255,${alpha * trailStrength})`;
     ctx.lineWidth = 0.35 + s.z * 0.9;
@@ -235,7 +243,7 @@ function drawBackground(t, dt) {
     ctx.lineTo(s.x, s.y);
     ctx.stroke();
 
-    // -------- STAR DOT --------
+    // dot
     ctx.shadowBlur = s.z > 0.78 ? 8 : 0;
     ctx.shadowColor = "rgba(220,210,255,0.6)";
     ctx.beginPath();
@@ -245,7 +253,7 @@ function drawBackground(t, dt) {
     ctx.shadowBlur = 0;
   }
 
-  // NEAR STAR LAYER (faster parallax)
+  // NEAR STAR LAYER
   for (const s of nearStars) {
     s.x += 0.25 * step;
     if (s.x > w + 2) s.x = -2;
@@ -256,7 +264,7 @@ function drawBackground(t, dt) {
     ctx.fill();
   }
 
-  // faint gravitational glow
+  // glow
   ctx.globalAlpha = 0.08;
   const lg = ctx.createRadialGradient(
     cx,
@@ -357,32 +365,35 @@ let lastMs = 0;
 let animT = 0;
 let orbitRotation = 0;
 
+// used to make the epoch progress move fast (but still "acts like" a day)
+const simStartReal = Date.now() / 1000;
+
 function tick(ms) {
   if (!lastMs) lastMs = ms;
-  const dt = ((ms - lastMs) / 1000) * SPEED_MULT;
+  const dt = (ms - lastMs) / 1000;
   lastMs = ms;
 
   animT += dt;
 
-  // ✅ TUNE ORBIT SPIN HERE:
-  // smaller number = slower spin (try 0.03, 0.05, 0.08)
-  orbitRotation += dt * 0.07;
-
-  // HUD time
-  const realNow = Date.now() / 1000;
-  const epochProgress = (realNow % EPOCH_SECONDS) / EPOCH_SECONDS;
+  // ✅ simulate time so checkpoints trigger often
+  const simNow = simStartReal + animT * TIME_SCALE;
+  const epochProgress = (simNow % EPOCH_SECONDS) / EPOCH_SECONDS;
   const sector = Math.min(SECTORS - 1, Math.floor(epochProgress * SECTORS));
 
-  epochEl.textContent = String(Math.floor(realNow / EPOCH_SECONDS));
+  // HUD
+  epochEl.textContent = String(Math.floor(simNow / EPOCH_SECONDS));
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
   barFill.style.width = `${epochProgress * 100}%`;
 
-  // draw background + stars
+  // draw bg + stars
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
   // orbit point for comet
   const p = orbitPoint(epochProgress);
+
+  // orbit rotation (slower, less “soap spin”)
+  orbitRotation += dt * ORBIT_SPIN;
 
   // rotate orbit group
   ctx.save();
@@ -399,7 +410,7 @@ function tick(ms) {
   const vx = p2.x - p.x;
   const vy = p2.y - p.y;
 
-  // ---- checkpoint trigger (edge trigger) ----
+  // checkpoint trigger (edge trigger)
   for (let i = 0; i < markers.length; i++) {
     const m = markers[i];
     const mp = orbitPoint(m.t);
@@ -409,16 +420,17 @@ function tick(ms) {
     const near = d < triggerDist;
 
     if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
-      checkpointCooldown = 1.0;
-      checkpointHold = 1.6;
+      // ✅ stays visible longer + flashes slower
+      checkpointCooldown = 0.35;
+      checkpointHold = 3.6;  // was 1.6
       checkpointFlash = 1.0;
-      if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
+      subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
     }
 
     wasNearMarker[i] = near;
   }
 
-  // ---- triangle lines ----
+  // triangle lines
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
@@ -434,7 +446,7 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // ---- marker dots ----
+  // marker dots
   for (const m of markers) {
     const mp = orbitPoint(m.t);
     ctx.beginPath();
@@ -451,24 +463,24 @@ function tick(ms) {
 
   ctx.restore();
 
-  // ---- checkpoint HUD styling timers ----
+  // HUD timers
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
+
   checkpointHold = Math.max(0, checkpointHold - dt);
-
   if (checkpointHold > 0) checkpointFlash = 1.0;
-  else checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
+  else checkpointFlash = Math.max(0, checkpointFlash - dt * 0.25); // ✅ slower fade
 
-  if (subEl) {
-    if (checkpointFlash > 0) {
-      const a = 0.55 + 0.45 * checkpointFlash;
-      subEl.style.color = `rgba(255, 140, 140, ${a})`;
-      subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
-    } else {
-      subEl.style.color = "";
-      subEl.style.textShadow = "";
-      if (subEl.textContent.startsWith("CHECKPOINT")) {
-        subEl.textContent = "Stage 0 • Visual simulation";
-      }
+  // HUD visual pulse (slower)
+  if (checkpointFlash > 0) {
+    const pulse = 0.55 + 0.45 * Math.sin(animT * 2.2); // ✅ slower pulse
+    const a = (0.45 + 0.55 * pulse) * checkpointFlash;
+    subEl.style.color = `rgba(255, 140, 140, ${a})`;
+    subEl.style.textShadow = `0 0 18px rgba(255, 90, 90, ${a})`;
+  } else {
+    subEl.style.color = "";
+    subEl.style.textShadow = "";
+    if (subEl.textContent.startsWith("CHECKPOINT")) {
+      subEl.textContent = "Stage 0 • Visual simulation";
     }
   }
 
