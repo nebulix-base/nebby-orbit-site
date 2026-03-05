@@ -46,25 +46,13 @@ let prevW = 0;
 let prevH = 0;
 
 // ---------------- STARFIELD ----------------
+
+// Mid layer (spiral + trails)
 const stars = Array.from({ length: 520 }, () => {
   const z = Math.random();
   const x = Math.random() * window.innerWidth;
   const y = Math.random() * window.innerHeight;
 
-const farStars = Array.from({ length: 220 }, () => ({
-  x: Math.random() * window.innerWidth,
-  y: Math.random() * window.innerHeight,
-  r: 0.25 + Math.random() * 0.5,
-  a: 0.15 + Math.random() * 0.35
-}));
-
-const nearStars = Array.from({ length: 120 }, () => ({
-  x: Math.random() * window.innerWidth,
-  y: Math.random() * window.innerHeight,
-  r: 0.8 + Math.random() * 1.6,
-  a: 0.35 + Math.random() * 0.6
-}));
-  
   return {
     x,
     y,
@@ -80,10 +68,25 @@ const nearStars = Array.from({ length: 120 }, () => ({
   };
 });
 
+// Far layer (slow drift)
+const farStars = Array.from({ length: 220 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.25 + Math.random() * 0.5,
+  a: 0.12 + Math.random() * 0.28,
+}));
+
+// Near layer (faster drift)
+const nearStars = Array.from({ length: 120 }, () => ({
+  x: Math.random() * window.innerWidth,
+  y: Math.random() * window.innerHeight,
+  r: 0.8 + Math.random() * 1.6,
+  a: 0.25 + Math.random() * 0.55,
+}));
+
 function respawnStar(s, cx, cy) {
   const ang = Math.random() * Math.PI * 2;
-
-// bias spawn toward center to maintain density
+  // bias spawn toward center to maintain density
   const rad = Math.pow(Math.random(), 0.6) * 40;
 
   s.x = cx + Math.cos(ang) * rad;
@@ -105,22 +108,22 @@ function resize() {
   const sx = prevW ? w / prevW : 1;
   const sy = prevH ? h / prevH : 1;
 
+  // scale mid stars
   for (const s of stars) {
     s.x *= sx;
     s.y *= sy;
     s.px *= sx;
     s.py *= sy;
-  
-  for (const s of farStars) {
-  s.x *= sx;
-  s.y *= sy;
-}
+  }
 
-for (const s of nearStars) {
-  s.x *= sx;
-  s.y *= sy;
-}
-  
+  // scale far/near stars
+  for (const s of farStars) {
+    s.x *= sx;
+    s.y *= sy;
+  }
+  for (const s of nearStars) {
+    s.x *= sx;
+    s.y *= sy;
   }
 
   canvas.width = Math.floor(w * dpr);
@@ -154,34 +157,23 @@ function drawBackground(t, dt) {
 
   // FEEL CONTROLS
   const swirl = 0.00013; // lower = slower spiral
-  const drift = 0.018;   // higher = more "forward travel"
+  const drift = 0.018; // higher = more "forward travel"
 
   // normalize dt to ~60fps so movement is consistent
   const step = Math.min(2, dt * 60);
 
-// FAR STAR LAYER (very slow drift)
-for (const s of farStars) {
+  // FAR STAR LAYER (very slow drift)
+  for (const s of farStars) {
+    s.x += 0.03 * step;
+    if (s.x > w + 2) s.x = -2;
 
-  s.x += 0.03;
-  if (s.x > w) s.x = 0;
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(200,210,255,${s.a})`;
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  ctx.beginPath();
-  ctx.fillStyle = `rgba(200,210,255,${s.a})`;
-  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
- // NEAR STAR LAYER (faster parallax)
-for (const s of nearStars) {
-
-  s.x += 0.25;
-  if (s.x > w) s.x = 0;
-
-  ctx.beginPath();
-  ctx.fillStyle = `rgba(255,240,255,${s.a})`;
-  ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-  ctx.fill();
-} 
+  // MID STAR LAYER (spiral + trails)
   for (const s of stars) {
     // fade-in (prevents popping)
     s.life = Math.min(1, s.life + s.grow * step);
@@ -196,18 +188,15 @@ for (const s of nearStars) {
     const dist = Math.max(60, Math.hypot(dx, dy));
     const inv = 1 / dist;
 
-
     // gravitational lens strength near center
     const lensRadius = Math.min(w, h) * 0.22;
     const lensStrength = 0.35;
-
     let lens = 0;
-
     if (dist < lensRadius) {
-    const d = dist / lensRadius;
-    lens = (1 - d) * lensStrength;
-}
-    
+      const d = dist / lensRadius;
+      lens = (1 - d) * lensStrength;
+    }
+
     // tangential direction (spin)
     const tx = -dy * inv;
     const ty = dx * inv;
@@ -222,7 +211,7 @@ for (const s of nearStars) {
     s.x += ((tx * swirl * k * 900) + (rx * drift * k) + (rx * lens * 40)) * step;
     s.y += ((ty * swirl * k * 900) + (ry * drift * k) + (ry * lens * 40)) * step;
 
-    // recycle stars (prevents empty gaps after long time)
+    // recycle stars (prevents empty gaps)
     if (s.x < -140 || s.x > w + 140 || s.y < -140 || s.y > h + 140) {
       respawnStar(s, cx, cy);
       continue;
@@ -236,9 +225,7 @@ for (const s of nearStars) {
     const tw = 0.85 + 0.15 * Math.sin(t * 1.4 + s.phase);
     const alpha = s.a * tw * (0.25 + 0.75 * s.life);
 
-    // -------- STAR TRAIL (this is the missing effect) --------
-    // draw a short line from previous position to current position
-    // (stronger for nearer stars)
+    // -------- STAR TRAIL --------
     const trailStrength = 0.10 + 0.30 * s.z; // near stars = stronger trail
     ctx.beginPath();
     ctx.strokeStyle = `rgba(220,210,255,${alpha * trailStrength})`;
@@ -257,23 +244,35 @@ for (const s of nearStars) {
     ctx.fill();
     ctx.shadowBlur = 0;
   }
+
+  // NEAR STAR LAYER (faster parallax)
+  for (const s of nearStars) {
+    s.x += 0.25 * step;
+    if (s.x > w + 2) s.x = -2;
+
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255,240,255,${s.a})`;
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // faint gravitational glow
-ctx.globalAlpha = 0.08;
-
-const lg = ctx.createRadialGradient(
-  cx, cy, 0,
-  cx, cy, Math.min(w, h) * 0.25
-);
-
-lg.addColorStop(0, "rgba(200,160,255,1)");
-lg.addColorStop(1, "rgba(200,160,255,0)");
-
-ctx.fillStyle = lg;
-ctx.beginPath();
-ctx.arc(cx, cy, Math.min(w, h) * 0.25, 0, Math.PI * 2);
-ctx.fill();
-
-ctx.globalAlpha = 1;
+  ctx.globalAlpha = 0.08;
+  const lg = ctx.createRadialGradient(
+    cx,
+    cy,
+    0,
+    cx,
+    cy,
+    Math.min(w, h) * 0.25
+  );
+  lg.addColorStop(0, "rgba(200,160,255,1)");
+  lg.addColorStop(1, "rgba(200,160,255,0)");
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.min(w, h) * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 // ---------------- ORBIT + COMET ----------------
@@ -364,7 +363,10 @@ function tick(ms) {
   lastMs = ms;
 
   animT += dt;
-  orbitRotation += dt * (0.07 + Math.sin(animT * 0.2) * 0.015);// smooth visible spin little wobble
+
+  // ✅ TUNE ORBIT SPIN HERE:
+  // smaller number = slower spin (try 0.03, 0.05, 0.08)
+  orbitRotation += dt * 0.07;
 
   // HUD time
   const realNow = Date.now() / 1000;
@@ -375,7 +377,7 @@ function tick(ms) {
   sectorEl.textContent = `${sector + 1} / ${SECTORS}`;
   barFill.style.width = `${epochProgress * 100}%`;
 
-  // draw background + stars (stars movement depends on dt)
+  // draw background + stars
   ctx.clearRect(0, 0, w, h);
   drawBackground(animT, dt);
 
@@ -408,7 +410,7 @@ function tick(ms) {
 
     if (near && !wasNearMarker[i] && checkpointCooldown === 0) {
       checkpointCooldown = 1.0;
-      checkpointHold = 1.6; // readable
+      checkpointHold = 1.6;
       checkpointFlash = 1.0;
       if (subEl) subEl.textContent = `CHECKPOINT ✦ ${m.name}`;
     }
@@ -416,7 +418,7 @@ function tick(ms) {
     wasNearMarker[i] = near;
   }
 
-  // ---- marker triangle lines (THIS was missing) ----
+  // ---- triangle lines ----
   if (markers.length >= 3) {
     const pts = markers.map((m) => orbitPoint(m.t));
     ctx.shadowColor = "rgba(255,200,150,0.6)";
@@ -432,7 +434,7 @@ function tick(ms) {
     ctx.shadowBlur = 0;
   }
 
-  // ---- draw checkpoint marker dots (visual) ----
+  // ---- marker dots ----
   for (const m of markers) {
     const mp = orbitPoint(m.t);
     ctx.beginPath();
@@ -453,11 +455,8 @@ function tick(ms) {
   checkpointCooldown = Math.max(0, checkpointCooldown - dt);
   checkpointHold = Math.max(0, checkpointHold - dt);
 
-  if (checkpointHold > 0) {
-    checkpointFlash = 1.0;
-  } else {
-    checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
-  }
+  if (checkpointHold > 0) checkpointFlash = 1.0;
+  else checkpointFlash = Math.max(0, checkpointFlash - dt * 0.8);
 
   if (subEl) {
     if (checkpointFlash > 0) {
