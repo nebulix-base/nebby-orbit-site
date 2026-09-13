@@ -6,6 +6,13 @@ app.innerHTML = `
 
   <div class="hud">
     <div class="hud-title">Nebby Orbit</div>
+    <a
+      class="protocol-link"
+      href="https://nebulixprotocol.com/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Visit Nebulix Protocol"
+    >Part of Nebulix Protocol <span aria-hidden="true">↗</span></a>
 
     <div class="hud-row">
       <div class="hud-label">Epoch</div>
