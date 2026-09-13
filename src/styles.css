@@ -38,8 +38,35 @@ html, body {
 .hud-title {
   font-weight: 650;
   letter-spacing: 0.3px;
-  margin-bottom: 10px;
+  margin-bottom: 1px;
   color: rgba(240, 232, 255, 0.95);
+}
+
+.protocol-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 9px;
+  padding: 5px 0;
+  color: rgba(205, 190, 255, 0.68);
+  font-size: 11px;
+  letter-spacing: 0.15px;
+  text-decoration: underline;
+  text-decoration-color: rgba(205, 190, 255, 0.32);
+  text-underline-offset: 3px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.protocol-link:hover,
+.protocol-link:focus-visible {
+  color: rgba(240, 232, 255, 0.96);
+  text-decoration-color: currentColor;
+}
+
+.protocol-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(160, 120, 255, 0.7);
+  outline-offset: 3px;
 }
 
 .hud-row {
